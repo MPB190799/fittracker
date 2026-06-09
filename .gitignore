@@ -1,0 +1,7 @@
+# Server-Reste der ersten Version (App ist jetzt 100% statisch / client-side)
+node_modules/
+server.js
+package.json
+package-lock.json
+data/
+.DS_Store
