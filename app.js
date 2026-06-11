@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v5 · 2026-06-11";
+const APP_VERSION = "v6 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -554,9 +554,10 @@ function whoopKey() { try { return localStorage.getItem("fittracker:whoopkey") |
 function setWhoopKey(k) { try { k ? localStorage.setItem("fittracker:whoopkey", k) : localStorage.removeItem("fittracker:whoopkey"); } catch {} }
 on("#whoopConnect", "click", () => {
   const k = $("#whoopKey").value.trim();
-  if (!k) return alert("App-Schlüssel eingeben (von Claude erhalten).");
+  const msg = $("#whoopMsg");
+  if (!k) { if (msg) { msg.textContent = "⚠ Bitte zuerst den App-Schlüssel oben einfügen, dann erneut tippen."; msg.style.color = "var(--red)"; } return; }
   setWhoopKey(k);
-  $("#whoopMsg").textContent = "Weiterleitung zu Whoop…";
+  if (msg) { msg.textContent = "Öffne Whoop-Login…"; msg.style.color = "var(--muted)"; }
   window.location.href = WHOOP_WORKER + "/auth/start?key=" + encodeURIComponent(k);
 });
 on("#whoopRefresh", "click", () => loadWhoop(true));

@@ -51,7 +51,7 @@ export default {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       const valid = state ? await env.TOKENS.get("state:" + state) : null;
-      if (!valid) return htmlMsg("❌ Ungültiger oder abgelaufener Login-Versuch. Bitte in der App nochmal „Mit Whoop verbinden".", env, false);
+      if (!valid) return htmlMsg("Ungueltiger oder abgelaufener Login-Versuch. Bitte in der App nochmal mit Whoop verbinden.", env, false);
       await env.TOKENS.delete("state:" + state);
       const body = new URLSearchParams({
         grant_type: "authorization_code",
