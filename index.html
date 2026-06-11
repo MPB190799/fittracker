@@ -68,6 +68,30 @@
       </div>
     </section>
 
+    <!-- TAB: Körper (Whoop) -->
+    <section class="tabpage" id="tab-body">
+      <div class="card" id="bodyConnect">
+        <h2>Whoop verbinden</h2>
+        <p class="hint" style="margin-top:0">Einmalig einrichten: App-Schlüssel eingeben → mit Whoop einloggen. Danach erscheinen <b>Recovery, Schlaf &amp; Strain</b> automatisch — alles an einem Ort.</p>
+        <div class="field"><label>App-Schlüssel</label><input id="whoopKey" autocomplete="off" placeholder="von Claude erhalten" /></div>
+        <button class="primary" id="whoopConnect">Mit Whoop verbinden</button>
+        <p class="hint" id="whoopMsg"></p>
+      </div>
+      <div class="card" id="bodyData" style="display:none">
+        <div class="body-head"><h2 style="margin:0">Heute · Körper</h2><button class="ghost" id="whoopRefresh" style="width:auto;padding:8px 12px">↻</button></div>
+        <div class="body-grid">
+          <div class="bcard"><div class="bval" id="recVal">–</div><div class="blbl">Recovery</div><div class="bsub" id="recAmpel"></div></div>
+          <div class="bcard"><div class="bval" id="slpVal">–</div><div class="blbl">Schlaf</div><div class="bsub">Performance</div></div>
+          <div class="bcard"><div class="bval" id="strVal">–</div><div class="blbl">Strain</div><div class="bsub">heute</div></div>
+          <div class="bcard"><div class="bval" id="hrvVal">–</div><div class="blbl">HRV</div><div class="bsub">ms</div></div>
+          <div class="bcard"><div class="bval" id="rhrVal">–</div><div class="blbl">Ruhepuls</div><div class="bsub">bpm</div></div>
+        </div>
+        <p class="hint" id="whoopReco"></p>
+        <p class="hint" id="whoopTs"></p>
+        <button class="ghost" id="whoopDisconnect" style="width:100%;margin-top:6px">Trennen</button>
+      </div>
+    </section>
+
     <!-- TAB: Gewicht -->
     <section class="tabpage" id="tab-weight">
       <div class="card">
@@ -128,6 +152,7 @@
   <!-- bottom nav -->
   <nav class="tabs">
     <button data-tab="diary" class="active"><span class="ic">📕</span>Tagebuch</button>
+    <button data-tab="body"><span class="ic">🫀</span>Körper</button>
     <button data-tab="supps"><span class="ic">💊</span>Tabletten</button>
     <button data-tab="weight"><span class="ic">⚖️</span>Gewicht</button>
     <button data-tab="photos"><span class="ic">📷</span>Fotos</button>

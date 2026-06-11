@@ -1,0 +1,16 @@
+name = "fittracker-whoop"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+workers_dev = true
+
+# client_id ist NICHT geheim (steht ohnehin in der Browser-Auth-URL).
+# client_secret + app_token kommen als Secrets (wrangler secret put), NIE hier rein.
+[vars]
+WHOOP_CLIENT_ID = "f96bb049-3c01-44b1-ad59-054f7ba4ac1a"
+WORKER_BASE = "https://fittracker-whoop.mbcapitalstrategies.workers.dev"
+APP_ORIGIN = "https://mpb190799.github.io"
+APP_RETURN = "https://mpb190799.github.io/fittracker/"
+
+[[kv_namespaces]]
+binding = "TOKENS"
+id = "7d6e580caf6942bc88a52a77e38d62c7"

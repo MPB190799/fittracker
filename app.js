@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v4 · 2026-06-11";
+const APP_VERSION = "v5 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -513,6 +513,7 @@ function switchTab(tab) {
   if (tab === "weight") drawWeightChart();
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
+  if (tab === "body") loadWhoop();
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -547,6 +548,60 @@ on("#obSave", "click", () => {
 on("#obSkip", "click", finishOb);
 on("#obBg", "click", finishOb);
 
+// ---------- Whoop (Körper) ----------
+const WHOOP_WORKER = "https://fittracker-whoop.mbcapitalstrategies.workers.dev";
+function whoopKey() { try { return localStorage.getItem("fittracker:whoopkey") || ""; } catch { return ""; } }
+function setWhoopKey(k) { try { k ? localStorage.setItem("fittracker:whoopkey", k) : localStorage.removeItem("fittracker:whoopkey"); } catch {} }
+on("#whoopConnect", "click", () => {
+  const k = $("#whoopKey").value.trim();
+  if (!k) return alert("App-Schlüssel eingeben (von Claude erhalten).");
+  setWhoopKey(k);
+  $("#whoopMsg").textContent = "Weiterleitung zu Whoop…";
+  window.location.href = WHOOP_WORKER + "/auth/start?key=" + encodeURIComponent(k);
+});
+on("#whoopRefresh", "click", () => loadWhoop(true));
+on("#whoopDisconnect", "click", () => { if (confirm("Whoop-Verbindung auf diesem Gerät trennen?")) { setWhoopKey(""); loadWhoop(); } });
+async function loadWhoop(force) {
+  const conn = $("#bodyConnect"), data = $("#bodyData"); if (!conn || !data) return;
+  const k = whoopKey();
+  if (!k) { conn.style.display = "block"; data.style.display = "none"; return; }
+  $("#whoopKey").value = k;
+  try {
+    const r = await fetch(WHOOP_WORKER + "/whoop/today", { headers: { "X-App-Token": k } });
+    const d = await r.json();
+    if (!d || !d.connected) {
+      conn.style.display = "block"; data.style.display = "none";
+      $("#whoopMsg").textContent = d && d.error === "unauthorized" ? "Schlüssel stimmt nicht." : "Noch nicht mit Whoop eingeloggt — Button tippen.";
+      return;
+    }
+    conn.style.display = "none"; data.style.display = "block";
+    renderWhoop(d);
+  } catch { $("#whoopMsg").textContent = "Server nicht erreichbar (offline?)."; }
+}
+function renderWhoop(d) {
+  const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
+  const rec = d.recovery, slp = d.sleep, str = d.strain;
+  set("recVal", rec && rec.score != null ? rec.score + "%" : "–");
+  set("slpVal", slp && slp.performance != null ? slp.performance + "%" : "–");
+  set("strVal", str && str.strain != null ? str.strain : "–");
+  set("hrvVal", rec && rec.hrv != null ? rec.hrv : "–");
+  set("rhrVal", rec && rec.rhr != null ? rec.rhr : "–");
+  const amp = $("#recAmpel");
+  if (amp && rec && rec.score != null) {
+    const s = rec.score;
+    amp.textContent = s >= 67 ? "🟢 erholt" : s >= 34 ? "🟡 mittel" : "🔴 niedrig";
+  } else if (amp) amp.textContent = "";
+  const rv = $("#recVal");
+  if (rv && rec && rec.score != null) rv.style.color = rec.score >= 67 ? "var(--green)" : rec.score >= 34 ? "var(--gold)" : "var(--red)";
+  // Verknüpfung Körper ↔ Ernährung
+  let reco = "";
+  if (rec && rec.score != null && rec.score < 34) reco = "Erholung niedrig — heute eher leichte Einheit, genug Eiweiß + Schlaf priorisieren.";
+  else if (str && str.strain != null && str.strain >= 14) reco = "Hohe Belastung heute — achte auf ausreichend kcal + Eiweiß für die Regeneration.";
+  else if (rec && rec.score != null && rec.score >= 67) reco = "Gut erholt — guter Tag für eine intensive Einheit.";
+  set("whoopReco", reco);
+  set("whoopTs", d.ts ? "Stand: " + new Date(d.ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "");
+}
+
 // ---------- boot ----------
 function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); }
 try {
@@ -554,6 +609,11 @@ try {
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
   renderAll();
   maybeOnboard();
+  // Rückkehr vom Whoop-Login → direkt zum Körper-Tab
+  if (location.search.indexOf("whoop=ok") >= 0) {
+    switchTab("body");
+    try { history.replaceState(null, "", location.pathname); } catch {}
+  }
 } catch (e) {
   console.error(e);
   showErr("Fehler beim Start: " + (e && e.message ? e.message : e) + " — bitte Screenshot schicken.");
