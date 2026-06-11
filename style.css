@@ -194,3 +194,5 @@ nav.tabs button .ic { font-size: 20px; }
 .bval { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .blbl { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .4px; }
 .bsub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.res .restag{font-size:11px}

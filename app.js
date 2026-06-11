@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v7 · 2026-06-11";
+const APP_VERSION = "v8 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -20,6 +20,33 @@ const SEED_SUPPS = [
   { name: "Omega-3 (DHA/EPA)", dose: "≥1000 mg mit fettem Essen", when: "taeglich", cyclic: false },
   { name: "Bockshornklee", dose: "im Salat / Shake", when: "taeglich", cyclic: false },
   { name: "Himalaya-Salz", dose: "1 Prise ins Wasser", when: "morgens", cyclic: false }
+];
+
+// Eingebaute Mini-Datenbank häufiger Lebensmittel (immer + offline durchsuchbar, Werte pro 100 g)
+const LOCAL_FOODS = [
+  { name: "Magerquark", per100: { kcal: 67, protein: 12, carbs: 4, fat: 0.3 } },
+  { name: "Skyr natur", per100: { kcal: 63, protein: 11, carbs: 4, fat: 0.2 } },
+  { name: "Haferflocken", per100: { kcal: 372, protein: 13.5, carbs: 59, fat: 7 } },
+  { name: "Banane", per100: { kcal: 93, protein: 1.1, carbs: 21, fat: 0.3 } },
+  { name: "Apfel", per100: { kcal: 52, protein: 0.3, carbs: 14, fat: 0.2 } },
+  { name: "Ei (Hühnerei)", per100: { kcal: 155, protein: 13, carbs: 1.1, fat: 11 } },
+  { name: "Hähnchenbrust", per100: { kcal: 165, protein: 31, carbs: 0, fat: 3.6 } },
+  { name: "Rinderhack (mager)", per100: { kcal: 187, protein: 21, carbs: 0, fat: 11 } },
+  { name: "Lachs", per100: { kcal: 208, protein: 20, carbs: 0, fat: 13 } },
+  { name: "Thunfisch (Dose, Wasser)", per100: { kcal: 116, protein: 26, carbs: 0, fat: 1 } },
+  { name: "Reis (gekocht)", per100: { kcal: 130, protein: 2.7, carbs: 28, fat: 0.3 } },
+  { name: "Kartoffeln (gekocht)", per100: { kcal: 77, protein: 2, carbs: 17, fat: 0.1 } },
+  { name: "Vollkornbrot", per100: { kcal: 230, protein: 8, carbs: 40, fat: 3 } },
+  { name: "Nudeln (gekocht)", per100: { kcal: 158, protein: 6, carbs: 31, fat: 1 } },
+  { name: "Milch 1,5%", per100: { kcal: 47, protein: 3.4, carbs: 4.9, fat: 1.5 } },
+  { name: "Gouda / Käse", per100: { kcal: 356, protein: 25, carbs: 0, fat: 28 } },
+  { name: "Olivenöl", per100: { kcal: 884, protein: 0, carbs: 0, fat: 100 } },
+  { name: "Mandeln", per100: { kcal: 579, protein: 21, carbs: 22, fat: 50 } },
+  { name: "Whey Protein (Pulver)", per100: { kcal: 380, protein: 78, carbs: 8, fat: 6 } },
+  { name: "Käsekuchen", per100: { kcal: 254, protein: 6, carbs: 30, fat: 12 } },
+  { name: "Reiswaffel", per100: { kcal: 387, protein: 8, carbs: 81, fat: 3 } },
+  { name: "Avocado", per100: { kcal: 160, protein: 2, carbs: 9, fat: 15 } },
+  { name: "Kreatin Monohydrat (Pulver)", per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } }
 ];
 
 const DEFAULT = {
@@ -243,20 +270,35 @@ on("#searchInput", "input", (e) => {
   if (q.length < 2) { $("#results").innerHTML = ""; return; }
   searchTimer = setTimeout(() => offSearch(q), 350);
 });
+function localMatches(q) {
+  const ql = q.toLowerCase(), seen = new Set(), out = [];
+  for (const f of [...state.foods, ...LOCAL_FOODS]) {
+    const k = (f.name || "").toLowerCase();
+    if (k.indexOf(ql) >= 0 && !seen.has(k)) { seen.add(k); out.push({ name: f.name, per100: f.per100, local: true }); }
+  }
+  return out.slice(0, 8);
+}
 async function offSearch(q) {
-  $("#results").innerHTML = `<div class="empty">Suche…</div>`;
+  const box = $("#results");
+  // 1) lokale Treffer sofort (offline, schnell)
+  const local = localMatches(q);
+  const seen = new Set(local.map(x => x.name.toLowerCase()));
+  renderResults(local.length ? local : [{ name: "Suche…", per100: { kcal: 0, protein: 0 }, _ph: true }]);
+  // 2) Open Food Facts (neue Search-API) dazu
   try {
-    // deutsche Produktnamen bevorzugen, nach Popularität sortieren
-    const url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + encodeURIComponent(q) +
-      "&search_simple=1&action=process&json=1&page_size=25&lc=de" +
-      "&fields=product_name,product_name_de,brands,nutriments,code";
+    const url = "https://search.openfoodfacts.org/search?q=" + encodeURIComponent(q) +
+      "&page_size=25&lang=de&fields=product_name,product_name_de,brands,nutriments,code";
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 9000);
     const data = await (await fetch(url, { signal: ctrl.signal })).json();
     clearTimeout(t);
-    const items = (data.products || []).map(parseOFF).filter(Boolean);
-    renderResults(items);
-  } catch { $("#results").innerHTML = `<div class="empty">Suche fehlgeschlagen — Werte unten manuell eintragen.</div>`; }
+    const off = (data.hits || data.products || []).map(parseOFF).filter(Boolean).filter(it => !seen.has(it.name.toLowerCase()));
+    const all = local.concat(off);
+    renderResults(all.length ? all : []);
+  } catch {
+    if (!local.length) box.innerHTML = `<div class="empty">Suche fehlgeschlagen — lokale Treffer oben nutzen oder Werte unten manuell eintragen.</div>`;
+    else renderResults(local);
+  }
 }
 function parseOFF(p) {
   const n = p.nutriments || {};
@@ -274,7 +316,9 @@ function renderResults(items) {
   for (const it of items) {
     const d = document.createElement("div");
     d.className = "res";
-    d.innerHTML = `<div class="nm">${esc(it.name)}</div><div class="sub">${Math.round(it.per100.kcal)} kcal · ${round1(it.per100.protein)}P /100g</div>`;
+    if (it._ph) { d.className = "empty"; d.textContent = "Suche…"; box.appendChild(d); continue; }
+    const tag = it.local ? `<span class="restag">🔖</span> ` : "";
+    d.innerHTML = `<div class="nm">${tag}${esc(it.name)}</div><div class="sub">${Math.round(it.per100.kcal)} kcal · ${round1(it.per100.protein)}P /100g</div>`;
     d.onclick = () => pickFood(it);
     box.appendChild(d);
   }

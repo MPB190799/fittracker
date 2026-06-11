@@ -80,32 +80,88 @@ export default {
       try { access = await getAccessToken(env); }
       catch (e) { return json({ connected: false, error: String(e && e.message || e) }, 200, ch); }
       const h = { Authorization: "Bearer " + access };
-      const [rec, slp, cyc] = await Promise.all([
+      const [rec, slp, cyc, body] = await Promise.all([
         fetchJson(WHOOP_API + "/v2/recovery?limit=1", h),
         fetchJson(WHOOP_API + "/v2/activity/sleep?limit=1", h),
-        fetchJson(WHOOP_API + "/v2/cycle?limit=1", h)
+        fetchJson(WHOOP_API + "/v2/cycle?limit=1", h),
+        fetchJson(WHOOP_API + "/v2/user/measurement/body", h)
       ]);
       const recR = (rec.records || [])[0];
       const slpR = (slp.records || [])[0];
       const cycR = (cyc.records || [])[0];
+      const rs = recR && recR.score, ss = slpR && slpR.score, cs = cycR && cycR.score;
+      const stg = ss && ss.stage_summary || {};
+      const needObj = ss && ss.sleep_needed || {};
+      const needMilli = (needObj.baseline_milli || 0) + (needObj.need_from_sleep_debt_milli || 0) + (needObj.need_from_recent_strain_milli || 0) - (needObj.need_from_recent_nap_milli || 0);
+      const asleepMilli = (stg.total_light_sleep_time_milli || 0) + (stg.total_slow_wave_sleep_time_milli || 0) + (stg.total_rem_sleep_time_milli || 0);
       const out = {
         connected: true,
-        recovery: recR && recR.score ? {
-          score: num(recR.score.recovery_score),
-          rhr: num(recR.score.resting_heart_rate),
-          hrv: recR.score.hrv_rmssd_milli != null ? Math.round(recR.score.hrv_rmssd_milli) : null
+        recovery: rs ? {
+          score: num(rs.recovery_score),
+          rhr: num(rs.resting_heart_rate),
+          hrv: rs.hrv_rmssd_milli != null ? Math.round(rs.hrv_rmssd_milli) : null,
+          spo2: rs.spo2_percentage != null ? Math.round(rs.spo2_percentage * 10) / 10 : null,
+          skinTemp: rs.skin_temp_celsius != null ? Math.round(rs.skin_temp_celsius * 10) / 10 : null
         } : null,
-        sleep: slpR && slpR.score ? {
-          performance: num(slpR.score.sleep_performance_percentage),
-          efficiency: num(slpR.score.sleep_efficiency_percentage)
+        sleep: ss ? {
+          performance: num(ss.sleep_performance_percentage),
+          efficiency: num(ss.sleep_efficiency_percentage),
+          consistency: num(ss.sleep_consistency_percentage),
+          respiratory: ss.respiratory_rate != null ? Math.round(ss.respiratory_rate * 10) / 10 : null,
+          asleepH: hrs(asleepMilli),
+          needH: hrs(needMilli > 0 ? needMilli : 0),
+          remH: hrs(stg.total_rem_sleep_time_milli),
+          deepH: hrs(stg.total_slow_wave_sleep_time_milli),
+          lightH: hrs(stg.total_light_sleep_time_milli),
+          disturbances: num(stg.disturbance_count),
+          cycles: num(stg.sleep_cycle_count)
         } : null,
-        strain: cycR && cycR.score ? {
-          strain: cycR.score.strain != null ? Math.round(cycR.score.strain * 10) / 10 : null,
-          avgHr: num(cycR.score.average_heart_rate)
+        strain: cs ? {
+          strain: cs.strain != null ? Math.round(cs.strain * 10) / 10 : null,
+          avgHr: num(cs.average_heart_rate),
+          maxHr: num(cs.max_heart_rate),
+          kcal: cs.kilojoule != null ? Math.round(cs.kilojoule * 0.239006) : null
+        } : null,
+        body: body && body.weight_kilogram != null ? {
+          weightKg: Math.round(body.weight_kilogram * 10) / 10,
+          maxHr: num(body.max_heart_rate)
         } : null,
         ts: new Date().toISOString()
       };
       return json(out, 200, ch);
+    }
+
+    // 5) Historie (letzte N Tage direkt aus Whoop)
+    if (path === "/whoop/history") {
+      if (key !== env.APP_TOKEN) return json({ error: "unauthorized" }, 401, ch);
+      let access;
+      try { access = await getAccessToken(env); }
+      catch (e) { return json({ connected: false }, 200, ch); }
+      const h = { Authorization: "Bearer " + access };
+      const lim = Math.min(25, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10)));
+      const [rec, slp, cyc] = await Promise.all([
+        fetchJson(WHOOP_API + "/v2/recovery?limit=" + lim, h),
+        fetchJson(WHOOP_API + "/v2/activity/sleep?limit=" + lim, h),
+        fetchJson(WHOOP_API + "/v2/cycle?limit=" + lim, h)
+      ]);
+      const day = {};
+      const get = (d) => (day[d] || (day[d] = { date: d }));
+      for (const r of (rec.records || [])) {
+        const d = (r.created_at || "").slice(0, 10); if (!d || !r.score) continue;
+        const o = get(d); o.recovery = num(r.score.recovery_score); o.hrv = r.score.hrv_rmssd_milli != null ? Math.round(r.score.hrv_rmssd_milli) : null; o.rhr = num(r.score.resting_heart_rate);
+      }
+      for (const s of (slp.records || [])) {
+        const d = (s.end || s.start || "").slice(0, 10); if (!d || !s.score) continue;
+        const stg = s.score.stage_summary || {};
+        const asleep = (stg.total_light_sleep_time_milli || 0) + (stg.total_slow_wave_sleep_time_milli || 0) + (stg.total_rem_sleep_time_milli || 0);
+        const o = get(d); o.sleepPerf = num(s.score.sleep_performance_percentage); o.sleepH = hrs(asleep);
+      }
+      for (const c of (cyc.records || [])) {
+        const d = (c.start || "").slice(0, 10); if (!d || !c.score) continue;
+        const o = get(d); o.strain = c.score.strain != null ? Math.round(c.score.strain * 10) / 10 : null;
+      }
+      const days = Object.values(day).sort((a, b) => a.date.localeCompare(b.date));
+      return json({ connected: true, days }, 200, ch);
     }
 
     return new Response("FitTracker Whoop Worker — ok", { status: 200, headers: { "Content-Type": "text/plain" } });
@@ -113,6 +169,7 @@ export default {
 };
 
 function num(v) { return v != null ? Math.round(v) : null; }
+function hrs(milli) { return milli != null && milli > 0 ? Math.round(milli / 360000) / 10 : null; } // ms → Stunden (1 Dezimal)
 
 async function saveTokens(env, tok) {
   const rec = {
