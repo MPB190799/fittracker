@@ -33,6 +33,33 @@ header.top h1 span { color: var(--gold); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 14px; }
 .card h2 { margin: 0 0 12px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
 
+/* Fehler-Banner */
+#errbar { display: none; background: #3a1d22; color: #ffb3bd; border-bottom: 1px solid #5c2a32; padding: 10px 14px; font-size: 13px; }
+
+/* Rest heute */
+.hero { background: linear-gradient(160deg, #1c2027, #15181e); }
+.rest { display: flex; gap: 12px; margin-bottom: 14px; }
+.rest-big { flex: 1; background: var(--card2); border-radius: 12px; padding: 14px 10px; text-align: center; }
+.rest-big span { display: block; font-size: 30px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+.rest-big span.neg { color: var(--red); }
+.rest-big small { color: var(--muted); font-size: 12px; }
+
+/* supplements */
+.supp-count { color: var(--muted); font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.supp { display: flex; align-items: center; gap: 12px; padding: 12px 10px; background: var(--card2); border: 1px solid var(--line); border-radius: 11px; margin-bottom: 8px; }
+.supp .chk { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--bg); font-weight: 800; flex: 0 0 auto; }
+.supp.done { border-color: var(--green); }
+.supp.done .chk { background: var(--green); border-color: var(--green); }
+.supp .info { flex: 1; min-width: 0; }
+.supp.done .info .nm { color: var(--muted); text-decoration: line-through; }
+.supp .info .nm { font-weight: 600; }
+.supp .info .sub { font-size: 12px; color: var(--muted); }
+.supp .tag { font-size: 10px; background: #2a2f3a; color: var(--gold); border-radius: 6px; padding: 1px 6px; vertical-align: middle; }
+.supp .edit { color: var(--muted); padding: 8px 8px; font-size: 16px; background: none; border: none; flex: 0 0 auto; }
+label.check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); margin-top: 4px; }
+label.check input { width: 18px; height: 18px; }
+.sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+
 /* Rings / summary */
 .summary { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr; gap: 10px; text-align: center; }
 .metric { background: var(--card2); border-radius: 11px; padding: 12px 6px; }
