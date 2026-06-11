@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v8 · 2026-06-11";
+const APP_VERSION = "v9 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -53,8 +53,15 @@ const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70 },
   entries: [], weights: [], photos: [], foods: [],
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
-  suppLog: {} // { "2026-06-11": { suppId: true } }
+  suppLog: {}, // { "2026-06-11": { suppId: true } }
+  journal: {}, // { "2026-06-11": { flags:{}, mood:3, note:"" } }
+  bodyLog: {}  // { "2026-06-11": { recovery, hrv, rhr, sleepH, sleepPerf, strain } }
 };
+const JFLAGS = [
+  { k: "alkohol", t: "🍺 Alkohol" }, { k: "spaet", t: "🌙 spät gegessen" },
+  { k: "koffein", t: "☕ Koffein spät" }, { k: "stress", t: "😰 Stress" },
+  { k: "sport", t: "🏋️ Sport" }, { k: "gut", t: "😴 gut geschlafen" }
+];
 const RING_C = 2 * Math.PI * 42; // Umfang des Ring-Kreises (r=42)
 const LS_KEY = "fittracker:db";
 
@@ -74,7 +81,9 @@ function load() {
       // supplements nur seeden, wenn der Key komplett fehlt (Bestandsdaten ohne Tabletten-Feature)
       supplements: Array.isArray(db.supplements) ? db.supplements : clone(DEFAULT.supplements),
       suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
-      foods: Array.isArray(db.foods) ? db.foods : []
+      foods: Array.isArray(db.foods) ? db.foods : [],
+      journal: db.journal && typeof db.journal === "object" ? db.journal : {},
+      bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {}
     };
   } catch (e) { console.error("load failed", e); return clone(DEFAULT); }
 }
@@ -563,7 +572,7 @@ function switchTab(tab) {
   if (tab === "weight") drawWeightChart();
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
-  if (tab === "body") loadWhoop();
+  if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); }
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -573,7 +582,7 @@ function shiftDay(d) {
   selDate = dt.toISOString().slice(0, 10);
   refreshDate();
 }
-function refreshDate() { $("#datePicker").value = selDate; renderDiary(); renderSupps(); }
+function refreshDate() { $("#datePicker").value = selDate; renderDiary(); renderSupps(); renderJournal(); }
 
 // ---------- FAB (schnell hinzufügen) ----------
 on("#fab", "click", () => {
@@ -631,27 +640,135 @@ async function loadWhoop(force) {
 }
 function renderWhoop(d) {
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
-  const rec = d.recovery, slp = d.sleep, str = d.strain;
-  set("recVal", rec && rec.score != null ? rec.score + "%" : "–");
-  set("slpVal", slp && slp.performance != null ? slp.performance + "%" : "–");
-  set("strVal", str && str.strain != null ? str.strain : "–");
-  set("hrvVal", rec && rec.hrv != null ? rec.hrv : "–");
-  set("rhrVal", rec && rec.rhr != null ? rec.rhr : "–");
+  const rec = d.recovery || {}, slp = d.sleep || {}, str = d.strain || {};
+  const dash = (v, suf) => v != null ? (v + (suf || "")) : "–";
+  // Recovery-Hero
+  set("recVal", rec.score != null ? rec.score + "%" : "–");
   const amp = $("#recAmpel");
-  if (amp && rec && rec.score != null) {
-    const s = rec.score;
-    amp.textContent = s >= 67 ? "🟢 erholt" : s >= 34 ? "🟡 mittel" : "🔴 niedrig";
-  } else if (amp) amp.textContent = "";
+  if (amp) amp.textContent = rec.score != null ? (rec.score >= 67 ? "🟢 erholt" : rec.score >= 34 ? "🟡 mittel" : "🔴 niedrig") : "";
   const rv = $("#recVal");
-  if (rv && rec && rec.score != null) rv.style.color = rec.score >= 67 ? "var(--green)" : rec.score >= 34 ? "var(--gold)" : "var(--red)";
-  // Verknüpfung Körper ↔ Ernährung
+  if (rv) rv.style.color = rec.score == null ? "var(--text)" : rec.score >= 67 ? "var(--green)" : rec.score >= 34 ? "var(--gold)" : "var(--red)";
+  // Erholung
+  set("hrvVal", dash(rec.hrv)); set("rhrVal", dash(rec.rhr)); set("spo2Val", dash(rec.spo2)); set("skinVal", dash(rec.skinTemp));
+  // Schlaf
+  set("slpHVal", slp.asleepH != null ? slp.asleepH + " h" : "–");
+  set("slpNeedSub", slp.needH != null ? "Bedarf " + slp.needH + " h" : "h");
+  set("slpPerfVal", dash(slp.performance)); set("slpEffVal", dash(slp.efficiency));
+  set("remVal", dash(slp.remH)); set("deepVal", dash(slp.deepH)); set("respVal", dash(slp.respiratory));
+  // Belastung
+  set("strVal", dash(str.strain)); set("avgHrVal", dash(str.avgHr)); set("maxHrVal", dash(str.maxHr)); set("kcalBurnVal", dash(str.kcal));
+  // Empfehlung
   let reco = "";
-  if (rec && rec.score != null && rec.score < 34) reco = "Erholung niedrig — heute eher leichte Einheit, genug Eiweiß + Schlaf priorisieren.";
-  else if (str && str.strain != null && str.strain >= 14) reco = "Hohe Belastung heute — achte auf ausreichend kcal + Eiweiß für die Regeneration.";
-  else if (rec && rec.score != null && rec.score >= 67) reco = "Gut erholt — guter Tag für eine intensive Einheit.";
+  if (rec.score != null && rec.score < 34) reco = "Erholung niedrig — heute eher leichte Einheit, genug Eiweiß + Schlaf priorisieren.";
+  else if (str.strain != null && str.strain >= 14) reco = "Hohe Belastung heute — achte auf ausreichend kcal + Eiweiß für die Regeneration.";
+  else if (rec.score != null && rec.score >= 67) reco = "Gut erholt — guter Tag für eine intensive Einheit.";
   set("whoopReco", reco);
   set("whoopTs", d.ts ? "Stand: " + new Date(d.ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "");
+  // heutigen Snapshot lokal speichern (Historie)
+  if (rec.score != null || slp.asleepH != null || str.strain != null) {
+    state.bodyLog[today()] = { recovery: rec.score, hrv: rec.hrv, rhr: rec.rhr, sleepH: slp.asleepH, sleepPerf: slp.performance, strain: str.strain };
+    persist();
+  }
 }
+
+// ---------- Journal ----------
+function jToday() { return state.journal[selDate] || (state.journal[selDate] = { flags: {}, mood: 0, note: "" }); }
+function renderJournal() {
+  const box = $("#jflags"); if (!box) return;
+  const j = jToday();
+  box.innerHTML = "";
+  for (const f of JFLAGS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip" + (j.flags[f.k] ? " on" : "");
+    b.textContent = f.t;
+    b.onclick = () => { j.flags[f.k] = !j.flags[f.k]; persist(); renderJournal(); };
+    box.appendChild(b);
+  }
+  const mood = $("#jmood");
+  if (mood) {
+    mood.innerHTML = "";
+    ["😖", "😕", "😐", "🙂", "😄"].forEach((emo, i) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "moodb" + (j.mood === i + 1 ? " on" : "");
+      b.textContent = emo;
+      b.onclick = () => { j.mood = i + 1; persist(); renderJournal(); };
+      mood.appendChild(b);
+    });
+  }
+  const note = $("#jnote"); if (note && note.value !== j.note) note.value = j.note || "";
+}
+on("#jnote", "input", (e) => { jToday().note = e.target.value; persist(); });
+
+// ---------- Verlauf + Insights ----------
+async function loadHistory(force) {
+  const k = whoopKey(); if (!k) return;
+  try {
+    const r = await fetch(WHOOP_WORKER + "/whoop/history?days=14", { headers: { "X-App-Token": k } });
+    const d = await r.json();
+    if (d && d.days) {
+      for (const day of d.days) {
+        const prev = state.bodyLog[day.date] || {};
+        state.bodyLog[day.date] = { ...prev, recovery: day.recovery, hrv: day.hrv, rhr: day.rhr, sleepH: day.sleepH, sleepPerf: day.sleepPerf, strain: day.strain };
+      }
+      persist();
+    }
+  } catch {}
+  drawTrend(); renderInsights();
+}
+function bodyDays(n) {
+  return Object.keys(state.bodyLog).sort().slice(-n).map(date => ({ date, ...state.bodyLog[date] }));
+}
+function drawTrend() {
+  const cv = $("#trendChart"); if (!cv) return;
+  const pts = bodyDays(14);
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth || 320, H = 150;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+  if (pts.length < 2) { ctx.fillStyle = "#9aa3b2"; ctx.font = "13px sans-serif"; ctx.fillText("Noch zu wenig Tage für den Verlauf.", 10, 75); return; }
+  const pad = 22, n = pts.length;
+  const gx = (i) => pad + i * (W - 2 * pad) / (n - 1);
+  // Recovery 0-100 (gold)
+  const gyR = (v) => H - pad - (v / 100) * (H - 2 * pad);
+  ctx.strokeStyle = "#d4af37"; ctx.lineWidth = 2; ctx.beginPath();
+  let started = false;
+  pts.forEach((p, i) => { if (p.recovery == null) return; const x = gx(i), y = gyR(p.recovery); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; });
+  ctx.stroke();
+  ctx.fillStyle = "#d4af37"; pts.forEach((p, i) => { if (p.recovery == null) return; ctx.beginPath(); ctx.arc(gx(i), gyR(p.recovery), 2.5, 0, 7); ctx.fill(); });
+  // Schlaf h 0-10 (blau)
+  const gyS = (v) => H - pad - (Math.min(v, 10) / 10) * (H - 2 * pad);
+  ctx.strokeStyle = "#5b9bef"; ctx.lineWidth = 2; ctx.beginPath(); started = false;
+  pts.forEach((p, i) => { if (p.sleepH == null) return; const x = gx(i), y = gyS(p.sleepH); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; });
+  ctx.stroke();
+}
+function renderInsights() {
+  const box = $("#insights"); if (!box) return;
+  // Tage mit Journal UND Recovery
+  const rows = [];
+  for (const date of Object.keys(state.bodyLog)) {
+    const b = state.bodyLog[date], j = state.journal[date];
+    if (b && b.recovery != null && j) rows.push({ date, rec: b.recovery, flags: j.flags || {} });
+  }
+  if (rows.length < 4) {
+    box.innerHTML = `<p class="hint">Noch ${Math.max(0, 4 - rows.length)} Journal-Tag(e) bis zur ersten Auswertung. Trag oben einfach täglich kurz ein, was war.</p>`;
+    return;
+  }
+  const out = [];
+  for (const f of JFLAGS) {
+    const withF = rows.filter(r => r.flags[f.k]), without = rows.filter(r => !r.flags[f.k]);
+    if (withF.length >= 2 && without.length >= 2) {
+      const avg = (a) => Math.round(a.reduce((s, r) => s + r.rec, 0) / a.length);
+      const aw = avg(withF), ao = avg(without), diff = aw - ao;
+      if (Math.abs(diff) >= 4) out.push({ t: f.t, aw, ao, diff });
+    }
+  }
+  if (!out.length) { box.innerHTML = `<p class="hint">Noch keine klaren Muster — sammle ein paar Tage mehr.</p>`; return; }
+  out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  box.innerHTML = out.slice(0, 4).map(o => {
+    const good = o.diff > 0;
+    return `<div class="insight ${good ? "good" : "bad"}">${good ? "🟢" : "🔻"} <b>${esc(o.t)}</b>: Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
+  }).join("");
+}
+on("#histRefresh", "click", () => loadHistory(true));
 
 // ---------- boot ----------
 function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); }

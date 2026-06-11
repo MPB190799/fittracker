@@ -79,16 +79,55 @@
       </div>
       <div class="card" id="bodyData" style="display:none">
         <div class="body-head"><h2 style="margin:0">Heute · Körper</h2><button class="ghost" id="whoopRefresh" style="width:auto;padding:8px 12px">↻</button></div>
+        <div class="rec-hero"><div class="rec-big" id="recVal">–</div><div class="rec-meta"><div class="blbl">Recovery</div><div id="recAmpel" class="bsub"></div></div></div>
+
+        <h3 class="bsec">Erholung</h3>
         <div class="body-grid">
-          <div class="bcard"><div class="bval" id="recVal">–</div><div class="blbl">Recovery</div><div class="bsub" id="recAmpel"></div></div>
-          <div class="bcard"><div class="bval" id="slpVal">–</div><div class="blbl">Schlaf</div><div class="bsub">Performance</div></div>
-          <div class="bcard"><div class="bval" id="strVal">–</div><div class="blbl">Strain</div><div class="bsub">heute</div></div>
           <div class="bcard"><div class="bval" id="hrvVal">–</div><div class="blbl">HRV</div><div class="bsub">ms</div></div>
           <div class="bcard"><div class="bval" id="rhrVal">–</div><div class="blbl">Ruhepuls</div><div class="bsub">bpm</div></div>
+          <div class="bcard"><div class="bval" id="spo2Val">–</div><div class="blbl">SpO₂</div><div class="bsub">%</div></div>
+          <div class="bcard"><div class="bval" id="skinVal">–</div><div class="blbl">Hauttemp</div><div class="bsub">°C</div></div>
         </div>
+
+        <h3 class="bsec">Schlaf</h3>
+        <div class="body-grid">
+          <div class="bcard"><div class="bval" id="slpHVal">–</div><div class="blbl">Schlaf</div><div class="bsub" id="slpNeedSub">h</div></div>
+          <div class="bcard"><div class="bval" id="slpPerfVal">–</div><div class="blbl">Performance</div><div class="bsub">%</div></div>
+          <div class="bcard"><div class="bval" id="slpEffVal">–</div><div class="blbl">Effizienz</div><div class="bsub">%</div></div>
+          <div class="bcard"><div class="bval" id="remVal">–</div><div class="blbl">REM</div><div class="bsub">h</div></div>
+          <div class="bcard"><div class="bval" id="deepVal">–</div><div class="blbl">Tiefschlaf</div><div class="bsub">h</div></div>
+          <div class="bcard"><div class="bval" id="respVal">–</div><div class="blbl">Atmung</div><div class="bsub">/min</div></div>
+        </div>
+
+        <h3 class="bsec">Belastung</h3>
+        <div class="body-grid">
+          <div class="bcard"><div class="bval" id="strVal">–</div><div class="blbl">Strain</div><div class="bsub">0–21</div></div>
+          <div class="bcard"><div class="bval" id="avgHrVal">–</div><div class="blbl">Ø Puls</div><div class="bsub">bpm</div></div>
+          <div class="bcard"><div class="bval" id="maxHrVal">–</div><div class="blbl">Max Puls</div><div class="bsub">bpm</div></div>
+          <div class="bcard"><div class="bval" id="kcalBurnVal">–</div><div class="blbl">Verbraucht</div><div class="bsub">kcal</div></div>
+        </div>
+
         <p class="hint" id="whoopReco"></p>
         <p class="hint" id="whoopTs"></p>
         <button class="ghost" id="whoopDisconnect" style="width:100%;margin-top:6px">Trennen</button>
+      </div>
+
+      <!-- Kurz-Journal -->
+      <div class="card" id="journalCard">
+        <h2>Journal heute</h2>
+        <p class="hint" style="margin-top:0">Schnell antippen, was heute war — daraus erkennt die App mit der Zeit, <b>was dir gut tut</b>.</p>
+        <div class="chips" id="jflags"></div>
+        <div class="field" style="margin-top:12px"><label>Stimmung</label><div class="mood" id="jmood"></div></div>
+        <div class="field"><label>Notiz (kurz)</label><input id="jnote" autocomplete="off" placeholder="optional, ein Satz" /></div>
+      </div>
+
+      <!-- Verlauf & Insights -->
+      <div class="card" id="historyCard">
+        <div class="body-head"><h2 style="margin:0">Verlauf</h2><button class="ghost" id="histRefresh" style="width:auto;padding:8px 12px">↻</button></div>
+        <canvas id="trendChart"></canvas>
+        <div class="trend-legend"><span class="lg rec">Recovery %</span> <span class="lg slp">Schlaf h</span></div>
+        <h3 class="bsec">Was dir gut tut</h3>
+        <div id="insights"><p class="hint">Wird berechnet, sobald ein paar Journal-Tage zusammenkommen (≈1 Woche).</p></div>
       </div>
     </section>
 

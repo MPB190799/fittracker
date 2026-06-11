@@ -1,7 +1,7 @@
 // Service Worker — installierbar + offline-fähig.
 // NETWORK-FIRST für eigene Dateien: online immer frische Version (kein "alte Version klebt"),
 // offline aus dem Cache. Fremd-Origin (Open Food Facts, CDN) immer direkt aus dem Netz.
-const CACHE = "fittracker-v8";
+const CACHE = "fittracker-v9";
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.json", "icon-192.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

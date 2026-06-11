@@ -196,3 +196,26 @@ nav.tabs button .ic { font-size: 20px; }
 .bsub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
 .res .restag{font-size:11px}
+
+/* ===== Körper erweitert + Journal + Verlauf ===== */
+.rec-hero { display: flex; align-items: center; gap: 16px; background: var(--card2); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.rec-big { font-size: 44px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.rec-meta .blbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.rec-meta .bsub { font-size: 15px; margin-top: 4px; }
+h3.bsec { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 16px 0 8px; }
+/* journal */
+.chip.on { background: var(--gold); color: #1a1a1a; border-color: var(--gold); font-weight: 700; }
+.mood { display: flex; gap: 8px; }
+.moodb { flex: 1; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 0; font-size: 22px; }
+.moodb.on { background: #232833; border-color: var(--gold); transform: scale(1.05); }
+/* verlauf */
+#trendChart { width: 100%; height: 150px; }
+.trend-legend { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.trend-legend .lg::before { content: "●"; margin-right: 4px; }
+.trend-legend .lg.rec::before { color: var(--gold); }
+.trend-legend .lg.slp::before { color: var(--blue); }
+.trend-legend .lg { margin-right: 12px; }
+.insight { background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+.insight.good { border-left: 3px solid var(--green); }
+.insight.bad { border-left: 3px solid var(--red); }
+.insight .idiff { color: var(--muted); }

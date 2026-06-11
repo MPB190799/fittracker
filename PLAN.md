@@ -92,3 +92,39 @@ Heute: 100 % statische PWA auf GitHub Pages, Daten nur lokal im Browser. Das ist
 - Whoop: hast du ein aktives Whoop-Abo + Zugriff auf developer.whoop.com? (API braucht beides)
 - Backend ok auf **Cloudflare Worker** (empfohlen) — oder lieber gar kein Backend und Whoop per manuellem Export?
 - Design: aktuelles Dunkel-Gold behalten/aufpolieren — oder kompletter neuer Look?
+
+---
+
+# UPDATE 2026-06-11 (abends) — Vollanalyse „was Marco braucht & will"
+
+## Wo wir stehen (live)
+- App v8 live, iOS-stabil. Essen (neue OFF-Suche + eingebaute Lebensmittel-DB + Favoriten + Schnell-Mengen + EAN-Scan), Tabletten (BioHacking-Stack), Gewicht, Fotos, Ziele.
+- **Whoop verbunden & läuft** (Cloudflare Worker): /whoop/today (Recovery, HRV, RHR, SpO₂, Hauttemp, Schlafphasen, Atmung, Strain, Kalorien) + /whoop/history (15 Tage rückwirkend).
+
+## Was Marco WILL (aus den Gesprächen destilliert)
+1. **Alles an einem Ort** — Ernährung + Supplements + Körper/Whoop + Gewicht + Fotos. ✅ Grundgerüst steht.
+2. **Bewusster/gesünder leben** — sehen, was gut/schlecht tut.
+3. **Mehr Körperdaten sichtbar** (Schlafdetails, Erholung). → baue ich jetzt.
+4. **Kurzes Journal** — bewusst knapp (Whoop übertreibt). → baue ich jetzt.
+5. **Historie + Daten dauerhaft speichern** — eigene Zeitreihe, Muster erkennen. → baue ich jetzt (lokal + Whoop-Backfill).
+6. **Schnell & einfach bedienbar** — Käsekuchen tippen, scannen, Menge rein. ✅ gefixt.
+
+## Roadmap (priorisiert)
+**Jetzt (dieser Build):**
+- Körper-Tab: alle Whoop-Felder sichtbar (Erholung/Schlaf/Belastung-Sektionen).
+- Kurz-Journal: 6 Häkchen (Alkohol/spät gegessen/Koffein spät/Stress/Sport/gut geschlafen) + Stimmung + 1 Notiz.
+- Verlauf: Recovery-/Schlaf-Trend (14 Tage, Whoop-Backfill) + tägliches lokales Speichern.
+- „Was tut dir gut": Korrelation Journal-Flags & Ernährung ↔ Recovery (sobald genug Tage).
+
+**Als Nächstes (Phase 4/5):**
+- Wasser-Tracking (Schnell +250/500 ml).
+- Supplement-Einnahme ↔ Recovery-Korrelation (nutzt suppLog + bodyLog).
+- Mahlzeiten-Vorlagen („mein Frühstück" 1-Tap-Set).
+- Wochen-Report (Schnitt Recovery/Schlaf/kcal/Eiweiß, Trend ggü. Vorwoche).
+- Auto-Backup-Erinnerung + optional Export in OneDrive.
+- Apple-Health-Brücke (Schritte/Gewicht) — später, iOS-Umweg.
+
+## Daten & Speicherung (wichtig für Marco)
+- Alles lokal im Browser (localStorage + IndexedDB für Fotos) — **bleibt dauerhaft**, kein Account.
+- Whoop-Verlauf: lokal gespeichert (state.bodyLog) + jederzeit aus Whoop rückholbar (Worker /whoop/history).
+- **Backup**: Export/Import als JSON (Tab Ziele). Vor Browser-/Handywechsel exportieren!
