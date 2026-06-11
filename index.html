@@ -30,16 +30,25 @@
     <!-- TAB: Tagebuch -->
     <section class="tabpage active" id="tab-diary">
       <div class="card hero">
-        <h2>Rest heute</h2>
-        <div class="rest">
-          <div class="rest-big"><span id="restKcal">0</span><small>kcal übrig</small></div>
-          <div class="rest-big"><span id="restProt">0</span><small>g Eiweiß übrig</small></div>
+        <div class="rings">
+          <div class="ring">
+            <div class="dial">
+              <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog kcal" id="ringKcal" cx="50" cy="50" r="42"/></svg>
+              <div class="ring-c"><span id="restKcal">0</span><small>kcal übrig</small></div>
+            </div>
+            <div class="ring-sub" id="kcalSub">0 / 0</div>
+          </div>
+          <div class="ring">
+            <div class="dial">
+              <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog p" id="ringProt" cx="50" cy="50" r="42"/></svg>
+              <div class="ring-c"><span id="restProt">0</span><small>g Eiweiß übrig</small></div>
+            </div>
+            <div class="ring-sub" id="protSub">0 / 0</div>
+          </div>
         </div>
-        <div class="summary">
-          <div class="metric kcal"><div class="val" id="kcalVal">0</div><div class="lbl">kcal <small id="kcalTgt"></small></div><div class="bar"><i id="kcalBar"></i></div></div>
-          <div class="metric p"><div class="val" id="pVal">0</div><div class="lbl">Eiweiß <small id="pTgt"></small></div><div class="bar"><i id="pBar"></i></div></div>
-          <div class="metric c"><div class="val" id="cVal">0</div><div class="lbl">KH <small id="cTgt"></small></div><div class="bar"><i id="cBar"></i></div></div>
-          <div class="metric f"><div class="val" id="fVal">0</div><div class="lbl">Fett <small id="fTgt"></small></div><div class="bar"><i id="fBar"></i></div></div>
+        <div class="macros2">
+          <div class="m2 c"><div class="m2-top"><span>KH</span><span><b id="cVal">0</b> <small id="cTgt"></small></span></div><div class="bar"><i id="cBar"></i></div></div>
+          <div class="m2 f"><div class="m2-top"><span>Fett</span><span><b id="fVal">0</b> <small id="fTgt"></small></span></div><div class="bar"><i id="fBar"></i></div></div>
         </div>
       </div>
 
@@ -113,6 +122,9 @@
     </section>
   </div>
 
+  <!-- Schnell-Hinzufügen -->
+  <button id="fab" aria-label="Hinzufügen">+</button>
+
   <!-- bottom nav -->
   <nav class="tabs">
     <button data-tab="diary" class="active"><span class="ic">📕</span>Tagebuch</button>
@@ -143,6 +155,11 @@
     </div>
     <div id="reader" style="display:none"></div>
 
+    <div id="favWrap" style="display:none">
+      <label class="chips-lbl">Schnell (zuletzt / oft gegessen)</label>
+      <div class="chips" id="favChips"></div>
+    </div>
+
     <div class="field"><label>Suchen (Open Food Facts)</label><input id="searchInput" autocomplete="off" placeholder="z.B. Magerquark, Haferflocken…" /></div>
     <div class="results" id="results"></div>
 
@@ -152,6 +169,14 @@
     <div class="row">
       <div class="field"><label>Menge (g)</label><input type="number" inputmode="decimal" id="fGrams" value="100" /></div>
       <div class="field"><label>kcal</label><input type="number" inputmode="numeric" id="fKcal" /></div>
+    </div>
+    <div class="chips" id="amountChips">
+      <button type="button" data-g="50">50 g</button>
+      <button type="button" data-g="100">100 g</button>
+      <button type="button" data-g="150">150 g</button>
+      <button type="button" data-g="200">200 g</button>
+      <button type="button" data-mult="0.5">½ Portion</button>
+      <button type="button" data-mult="2">2×</button>
     </div>
     <div class="row">
       <div class="field"><label>Eiweiß (g)</label><input type="number" inputmode="decimal" step="0.1" id="fProtein" /></div>
@@ -185,6 +210,19 @@
     <button class="primary" id="saveSupp" style="margin-top:12px">Speichern</button>
     <button class="ghost" id="delSupp" style="width:100%;margin-top:8px">Löschen</button>
     <button class="ghost" id="closeSupp" style="width:100%;margin-top:8px">Abbrechen</button>
+  </div>
+
+  <!-- Onboarding (Erststart) -->
+  <div class="sheet-bg" id="obBg"></div>
+  <div class="sheet" id="obSheet">
+    <div class="grab"></div>
+    <h3>Willkommen 👋</h3>
+    <p class="hint" style="margin-top:0">Kurz einrichten — dauert 20 Sekunden. Alles bleibt lokal auf deinem Gerät.</p>
+    <div class="field"><label>Dein Gewicht (kg)</label><input type="number" inputmode="decimal" step="0.1" id="obWeight" placeholder="z.B. 88.5" /></div>
+    <div class="field"><label>Kalorien-Ziel (kcal/Tag)</label><input type="number" inputmode="numeric" id="obKcal" placeholder="z.B. 2200" /></div>
+    <p class="hint" style="margin-top:0">Eiweiß-Ziel rechnet sich automatisch aus deinem Gewicht (2 g/kg) — später anpassbar.</p>
+    <button class="primary" id="obSave">Los geht's</button>
+    <button class="ghost" id="obSkip" style="width:100%;margin-top:8px">Überspringen</button>
   </div>
 
   <script src="app.js"></script>

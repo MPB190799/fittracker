@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v3 · 2026-06-11";
+const APP_VERSION = "v4 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -24,10 +24,11 @@ const SEED_SUPPS = [
 
 const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70 },
-  entries: [], weights: [], photos: [],
+  entries: [], weights: [], photos: [], foods: [],
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {} // { "2026-06-11": { suppId: true } }
 };
+const RING_C = 2 * Math.PI * 42; // Umfang des Ring-Kreises (r=42)
 const LS_KEY = "fittracker:db";
 
 let state = load();
@@ -45,7 +46,8 @@ function load() {
       profile: { ...DEFAULT.profile, ...(db.profile || {}) },
       // supplements nur seeden, wenn der Key komplett fehlt (Bestandsdaten ohne Tabletten-Feature)
       supplements: Array.isArray(db.supplements) ? db.supplements : clone(DEFAULT.supplements),
-      suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {}
+      suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
+      foods: Array.isArray(db.foods) ? db.foods : []
     };
   } catch (e) { console.error("load failed", e); return clone(DEFAULT); }
 }
@@ -73,31 +75,35 @@ function round1(n) { return Math.round(n * 10) / 10; }
 function showErr(msg) { const b = $("#errbar"); if (b) { b.textContent = "⚠ " + msg; b.style.display = "block"; } }
 
 // ---------- render diary ----------
+function setRing(id, pct) {
+  const el = $("#" + id); if (!el) return;
+  const p = Math.min(1, Math.max(0, pct || 0));
+  el.style.strokeDasharray = RING_C;
+  el.style.strokeDashoffset = RING_C * (1 - p);
+  el.classList.toggle("over", pct > 1.0001);
+}
 function renderSummary() {
   const es = dayEntries();
   const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat }), { kcal: 0, p: 0, c: 0, f: 0 });
   const pT = proteinTarget();
+  const kT = state.profile.kcalTarget || 0;
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
-  set("kcalVal", Math.round(sum.kcal)); set("pVal", Math.round(sum.p)); set("cVal", Math.round(sum.c)); set("fVal", Math.round(sum.f));
-  set("kcalTgt", "/ " + state.profile.kcalTarget);
-  set("pTgt", pT ? "/ " + pT : "(Gewicht?)");
-  set("cTgt", "/ " + state.profile.carbTarget);
-  set("fTgt", "/ " + state.profile.fatTarget);
-  // Rest heute
-  const restK = Math.round((state.profile.kcalTarget || 0) - sum.kcal);
-  const restP = pT != null ? Math.round(pT - sum.p) : null;
+  // kcal-Ring (Mitte = übrig)
+  const restK = Math.round(kT - sum.kcal);
   set("restKcal", restK);
-  set("restProt", restP != null ? restP : "–");
+  set("kcalSub", Math.round(sum.kcal) + " / " + kT);
+  setRing("ringKcal", kT ? sum.kcal / kT : 0);
   const rk = $("#restKcal"); if (rk) rk.classList.toggle("neg", restK < 0);
+  // Eiweiß-Ring
+  const restP = pT != null ? Math.round(pT - sum.p) : null;
+  set("restProt", restP != null ? restP : "–");
+  set("protSub", pT != null ? Math.round(sum.p) + " / " + pT : "Gewicht?");
+  setRing("ringProt", pT ? sum.p / pT : 0);
   const rp = $("#restProt"); if (rp) rp.classList.toggle("neg", restP != null && restP < 0);
-  const bar = (id, val, tgt) => {
-    const el = $("#" + id); if (!el) return;
-    el.style.width = (tgt ? Math.min(100, (val / tgt) * 100) : 0) + "%";
-    const valEl = el.parentElement.parentElement.querySelector(".val");
-    if (valEl) valEl.classList.toggle("over", tgt && val > tgt);
-  };
-  bar("kcalBar", sum.kcal, state.profile.kcalTarget);
-  bar("pBar", sum.p, pT || 0);
+  // KH/Fett-Balken
+  set("cVal", Math.round(sum.c)); set("cTgt", "/ " + state.profile.carbTarget);
+  set("fVal", Math.round(sum.f)); set("fTgt", "/ " + state.profile.fatTarget);
+  const bar = (id, val, tgt) => { const el = $("#" + id); if (el) el.style.width = (tgt ? Math.min(100, (val / tgt) * 100) : 0) + "%"; };
   bar("cBar", sum.c, state.profile.carbTarget);
   bar("fBar", sum.f, state.profile.fatTarget);
 }
@@ -210,6 +216,7 @@ function openSheet(meal, entry) {
   $("#fFat").value = entry ? entry.fat : "";
   $("#searchInput").value = ""; $("#results").innerHTML = ""; $("#per100hint").textContent = "";
   $("#saveEntry").textContent = entry ? "Speichern" : "Hinzufügen";
+  renderFavChips();
   showSheet("food", true);
 }
 function showSheet(which, on) {
@@ -285,6 +292,44 @@ for (const id of ["fKcal", "fProtein", "fCarbs", "fFat"]) {
   on("#" + id, "input", () => { per100 = null; $("#per100hint").textContent = ""; });
 }
 
+// ---------- Favoriten / eigene Lebensmittel ----------
+function foodKey(name) { return String(name || "").trim().toLowerCase(); }
+function rememberFood(e) {
+  if (!e.name) return;
+  const g = e.grams || 0;
+  const per100 = g ? { kcal: e.kcal / g * 100, protein: e.protein / g * 100, carbs: e.carbs / g * 100, fat: e.fat / g * 100 }
+    : { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat };
+  const key = foodKey(e.name);
+  let f = state.foods.find(x => foodKey(x.name) === key);
+  if (f) { f.uses = (f.uses || 0) + 1; f.lastUsed = selDate; f.per100 = per100; f.lastGrams = e.grams; }
+  else state.foods.push({ id: uid(), name: e.name, per100, uses: 1, lastUsed: selDate, lastGrams: e.grams });
+}
+function renderFavChips() {
+  const wrap = $("#favWrap"), box = $("#favChips"); if (!box) return;
+  const list = [...state.foods]
+    .sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || "") || (b.uses || 0) - (a.uses || 0))
+    .slice(0, 10);
+  if (!list.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block"; box.innerHTML = "";
+  for (const f of list) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip";
+    b.textContent = f.name.length > 24 ? f.name.slice(0, 23) + "…" : f.name;
+    b.onclick = () => {
+      pickFood({ name: f.name, per100: f.per100 });
+      if (f.lastGrams) { $("#fGrams").value = f.lastGrams; applyPer100(); }
+    };
+    box.appendChild(b);
+  }
+}
+
+// ---------- Schnell-Mengen ----------
+document.querySelectorAll("#amountChips button").forEach(b => b.onclick = () => {
+  if (b.dataset.g) $("#fGrams").value = b.dataset.g;
+  else if (b.dataset.mult) { const g = Number($("#fGrams").value) || 100; $("#fGrams").value = Math.round(g * Number(b.dataset.mult)); }
+  applyPer100();
+});
+
 // ---------- Barcode ----------
 let scanner = null;
 on("#scanBtn", "click", () => scanner ? stopScan() : startScan());
@@ -332,6 +377,7 @@ on("#saveEntry", "click", () => {
   const id = $("#editId").value;
   if (id) { const ex = state.entries.find(x => x.id === id); if (ex) Object.assign(ex, e); }
   else state.entries.push({ id: uid(), ...e });
+  rememberFood(e);
   persist(); showSheet("food", false); renderDiary();
 });
 on("#closeSheet", "click", () => showSheet("food", false));
@@ -478,12 +524,36 @@ function shiftDay(d) {
 }
 function refreshDate() { $("#datePicker").value = selDate; renderDiary(); renderSupps(); }
 
+// ---------- FAB (schnell hinzufügen) ----------
+on("#fab", "click", () => {
+  const h = new Date().getHours();
+  const meal = h < 11 ? "fruehstueck" : h < 15 ? "mittag" : h < 21 ? "abend" : "snack";
+  switchTab("diary"); openSheet(meal);
+});
+
+// ---------- Onboarding (Erststart) ----------
+function showOb(on) { $("#obBg").classList.toggle("show", on); $("#obSheet").classList.toggle("show", on); }
+function finishOb() { try { localStorage.setItem("fittracker:onboarded", "1"); } catch {} showOb(false); }
+function maybeOnboard() {
+  let seen = false; try { seen = !!localStorage.getItem("fittracker:onboarded"); } catch {}
+  if (!seen && !state.weights.length && !state.entries.length) showOb(true);
+}
+on("#obSave", "click", () => {
+  const w = Number($("#obWeight").value), k = Number($("#obKcal").value);
+  if (w) { state.weights = state.weights.filter(x => x.date !== today()); state.weights.push({ id: uid(), date: today(), kg: w }); state.weights.sort((a, b) => a.date.localeCompare(b.date)); }
+  if (k) state.profile.kcalTarget = k;
+  persist(); finishOb(); renderAll();
+});
+on("#obSkip", "click", finishOb);
+on("#obBg", "click", finishOb);
+
 // ---------- boot ----------
 function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); }
 try {
   $("#datePicker").value = selDate;
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
   renderAll();
+  maybeOnboard();
 } catch (e) {
   console.error(e);
   showErr("Fehler beim Start: " + (e && e.message ? e.message : e) + " — bitte Screenshot schicken.");
