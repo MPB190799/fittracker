@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v6 · 2026-06-11";
+const APP_VERSION = "v7 · 2026-06-11";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -342,9 +342,15 @@ async function startScan() {
   if (!window.isSecureContext) return alert("Kamera-Scan braucht HTTPS — auf der mpb190799.github.io-URL funktioniert es.");
   $("#reader").style.display = "block";
   $("#scanBtn").textContent = "⏹ Stoppen";
-  scanner = new Html5Qrcode("reader");
+  // Gezielt auf die Handels-Barcodes (EAN/UPC) scharfstellen → schneller + treffsicherer
+  let cfg;
+  if (window.Html5QrcodeSupportedFormats) {
+    const F = Html5QrcodeSupportedFormats;
+    cfg = { formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128] };
+  }
+  scanner = cfg ? new Html5Qrcode("reader", cfg) : new Html5Qrcode("reader");
   try {
-    await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } },
+    await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 270, height: 170 }, aspectRatio: 1.4 },
       async (code) => { await stopScan(); await barcodeLookup(code); }, () => {});
   } catch (e) {
     alert("Kamera nicht verfügbar. Tipp: in den iPhone-Einstellungen Safari → Kamera erlauben. Oder ‚EAN eingeben' nutzen.");
