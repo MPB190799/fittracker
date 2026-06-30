@@ -1,12 +1,19 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v10 · 2026-06-30";
+const APP_VERSION = "v10.1 · 2026-06-30";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+// Zeitzonensichere Tages-Arithmetik (rein lokal, kein UTC-Übersprung wie bei new Date("…T00:00:00"))
+const pad2 = (n) => String(n).padStart(2, "0");
+function dayOffset(dateStr, delta) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  return dt.getFullYear() + "-" + pad2(dt.getMonth() + 1) + "-" + pad2(dt.getDate());
+}
 const MEALS = { fruehstueck: "Frühstück", mittag: "Mittag", abend: "Abend", snack: "Snack" };
 const WHENLBL = { morgens: "morgens", mittag: "mittags", abend: "abends", taeglich: "täglich" };
 const uid = () => ((window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "id" + Date.now() + Math.random().toString(16).slice(2));
@@ -235,8 +242,7 @@ function renderMeals() {
   card.appendChild(rep);
 }
 function copyYesterday() {
-  const dt = new Date(selDate + "T00:00:00"); dt.setDate(dt.getDate() - 1);
-  const prev = dt.toISOString().slice(0, 10);
+  const prev = dayOffset(selDate, -1);
   const items = state.entries.filter(e => e.date === prev);
   if (!items.length) return alert("Für gestern gibt es keine Einträge zum Übernehmen.");
   if (!confirm(`${items.length} Einträge von gestern (${prev}) auf heute übernehmen?`)) return;
@@ -651,8 +657,7 @@ on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refres
 on("#prevDay", "click", () => shiftDay(-1));
 on("#nextDay", "click", () => shiftDay(1));
 function shiftDay(d) {
-  const dt = new Date(selDate + "T00:00:00"); dt.setDate(dt.getDate() + d);
-  selDate = dt.toISOString().slice(0, 10);
+  selDate = dayOffset(selDate, d);
   refreshDate();
 }
 function refreshDate() { $("#datePicker").value = selDate; renderDiary(); renderSupps(); renderJournal(); }
@@ -851,7 +856,7 @@ on("#foodPhotoInput", "change", async (e) => {
   const box = $("#visionBox"); if (!box) return;
   const k = whoopKey();
   if (!k) { box.innerHTML = `<div class="vision-msg err">⚠ Für die Foto-Erkennung einmalig im Körper-Tab (🫀) den App-Schlüssel hinterlegen — derselbe wie für Whoop.</div>`; return; }
-  box.innerHTML = `<div class="vision-msg">🔎 Essen wird erkannt… (ein paar Sekunden)</div>`;
+  box.innerHTML = `<div class="vision-msg loading"><span class="spin"></span>Essen wird erkannt… (ein paar Sekunden)</div>`;
   try {
     const dataUrl = await resizeImage(file, 900, 0.7);
     const r = await fetch(WHOOP_WORKER + "/vision/food", {
@@ -952,7 +957,7 @@ function renderTodayBody() {
 function renderWeekReport() {
   const grid = $("#weekGrid"); if (!grid) return;
   const days = [];
-  for (let i = 6; i >= 0; i--) { const dt = new Date(today() + "T00:00:00"); dt.setDate(dt.getDate() - i); days.push(dt.toISOString().slice(0, 10)); }
+  for (let i = 6; i >= 0; i--) days.push(dayOffset(today(), -i));
   const kcals = [], prots = [], recs = [], sleeps = [];
   const kT = state.profile.kcalTarget || 0, pT = proteinTarget();
   let proteinHits = 0, daysLogged = 0;
@@ -985,8 +990,7 @@ function renderSuppInsights() {
   const rows = [];
   for (const date of Object.keys(state.bodyLog)) {
     const b = state.bodyLog[date]; if (!b || b.recovery == null) continue;
-    const dt = new Date(date + "T00:00:00"); dt.setDate(dt.getDate() - 1);
-    const prev = dt.toISOString().slice(0, 10);
+    const prev = dayOffset(date, -1);
     rows.push({ rec: b.recovery, taken: state.suppLog[prev] || {} });
   }
   if (rows.length < 5) return;
@@ -1031,6 +1035,16 @@ try {
     switchTab("body");
     try { history.replaceState(null, "", location.pathname); } catch {}
   }
+  // Deep-Links: ?tab=body|supps|… (bookmarkbar) + ?add=1 (PWA-Schnellaktion „Hinzufügen")
+  try {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab && $("#tab-" + tab)) switchTab(tab);
+    if (params.get("add") === "1") {
+      const h = new Date().getHours();
+      openSheet(h < 11 ? "fruehstueck" : h < 15 ? "mittag" : h < 21 ? "abend" : "snack");
+    }
+  } catch {}
 } catch (e) {
   console.error(e);
   showErr("Fehler beim Start: " + (e && e.message ? e.message : e) + " — bitte Screenshot schicken.");
