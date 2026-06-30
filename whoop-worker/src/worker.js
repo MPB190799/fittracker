@@ -192,7 +192,7 @@ function num(v) { return v != null ? Math.round(v) : null; }
 function hrs(milli) { return milli != null && milli > 0 ? Math.round(milli / 360000) / 10 : null; } // ms → Stunden (1 Dezimal)
 
 // ---- Gemini Vision: Essensfoto → erkannte Speisen + geschätzte Nährwerte ----
-const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"];
 function clampNum(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return Math.max(lo, Math.min(hi, Math.round(v * 10) / 10)); }
 const FOOD_PROMPT =
   'Du bist Ernährungswissenschaftler. Analysiere das Foto von Essen/Getränk.\n' +
@@ -205,7 +205,7 @@ const FOOD_PROMPT =
 async function geminiFood(apiKey, mime, b64) {
   const reqBody = {
     contents: [{ parts: [{ text: FOOD_PROMPT }, { inline_data: { mime_type: mime, data: b64 } }] }],
-    generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 1024 }
+    generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }
   };
   let lastErr = "unknown";
   for (const model of GEMINI_MODELS) {
