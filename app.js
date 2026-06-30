@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v9 · 2026-06-11";
+const APP_VERSION = "v10 · 2026-06-30";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -46,16 +46,73 @@ const LOCAL_FOODS = [
   { name: "Käsekuchen", per100: { kcal: 254, protein: 6, carbs: 30, fat: 12 } },
   { name: "Reiswaffel", per100: { kcal: 387, protein: 8, carbs: 81, fat: 3 } },
   { name: "Avocado", per100: { kcal: 160, protein: 2, carbs: 9, fat: 15 } },
-  { name: "Kreatin Monohydrat (Pulver)", per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } }
+  { name: "Kreatin Monohydrat (Pulver)", per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } },
+  // Erweiterung — häufige deutsche Hausmannskost & Grundnahrungsmittel
+  { name: "Vollkornnudeln (gekocht)", per100: { kcal: 124, protein: 5, carbs: 23, fat: 1.2 } },
+  { name: "Quinoa (gekocht)", per100: { kcal: 120, protein: 4.4, carbs: 21, fat: 1.9 } },
+  { name: "Linsen (gekocht)", per100: { kcal: 116, protein: 9, carbs: 20, fat: 0.4 } },
+  { name: "Kichererbsen (gekocht)", per100: { kcal: 164, protein: 9, carbs: 27, fat: 2.6 } },
+  { name: "Bohnen (Dose)", per100: { kcal: 91, protein: 6, carbs: 12, fat: 0.5 } },
+  { name: "Brokkoli", per100: { kcal: 34, protein: 2.8, carbs: 7, fat: 0.4 } },
+  { name: "Tomate", per100: { kcal: 18, protein: 0.9, carbs: 3.9, fat: 0.2 } },
+  { name: "Gurke", per100: { kcal: 12, protein: 0.6, carbs: 2.2, fat: 0.1 } },
+  { name: "Paprika", per100: { kcal: 31, protein: 1, carbs: 6, fat: 0.3 } },
+  { name: "Karotte", per100: { kcal: 41, protein: 0.9, carbs: 10, fat: 0.2 } },
+  { name: "Zwiebel", per100: { kcal: 40, protein: 1.1, carbs: 9, fat: 0.1 } },
+  { name: "Spinat", per100: { kcal: 23, protein: 2.9, carbs: 3.6, fat: 0.4 } },
+  { name: "Blattsalat", per100: { kcal: 15, protein: 1.4, carbs: 2.9, fat: 0.2 } },
+  { name: "Pute (Brust)", per100: { kcal: 135, protein: 30, carbs: 0, fat: 1 } },
+  { name: "Schweineschnitzel (natur)", per100: { kcal: 143, protein: 22, carbs: 0, fat: 6 } },
+  { name: "Hackfleisch gemischt", per100: { kcal: 250, protein: 18, carbs: 0, fat: 20 } },
+  { name: "Bratwurst", per100: { kcal: 290, protein: 13, carbs: 1, fat: 26 } },
+  { name: "Schinken (gekocht)", per100: { kcal: 110, protein: 18, carbs: 1, fat: 4 } },
+  { name: "Salami", per100: { kcal: 378, protein: 22, carbs: 1, fat: 32 } },
+  { name: "Forelle", per100: { kcal: 119, protein: 20, carbs: 0, fat: 4 } },
+  { name: "Garnelen", per100: { kcal: 99, protein: 24, carbs: 0.2, fat: 0.3 } },
+  { name: "Hüttenkäse (körnig)", per100: { kcal: 98, protein: 12, carbs: 3.4, fat: 4.3 } },
+  { name: "Joghurt (natur 3,5%)", per100: { kcal: 63, protein: 3.5, carbs: 4.7, fat: 3.5 } },
+  { name: "Griechischer Joghurt 10%", per100: { kcal: 133, protein: 6, carbs: 4, fat: 10 } },
+  { name: "Butter", per100: { kcal: 717, protein: 0.9, carbs: 0.7, fat: 81 } },
+  { name: "Frischkäse", per100: { kcal: 253, protein: 6, carbs: 3.5, fat: 24 } },
+  { name: "Mozzarella", per100: { kcal: 254, protein: 18, carbs: 1, fat: 19 } },
+  { name: "Brötchen (Weizen)", per100: { kcal: 265, protein: 8.6, carbs: 51, fat: 1.5 } },
+  { name: "Toastbrot", per100: { kcal: 273, protein: 8, carbs: 49, fat: 4 } },
+  { name: "Brezel", per100: { kcal: 338, protein: 9, carbs: 67, fat: 3.4 } },
+  { name: "Pizza Margherita", per100: { kcal: 240, protein: 10, carbs: 30, fat: 8 } },
+  { name: "Pommes frites", per100: { kcal: 312, protein: 3.4, carbs: 41, fat: 15 } },
+  { name: "Döner (mit allem)", per100: { kcal: 215, protein: 14, carbs: 18, fat: 10 } },
+  { name: "Müsli (gemischt)", per100: { kcal: 360, protein: 9, carbs: 60, fat: 8 } },
+  { name: "Cornflakes", per100: { kcal: 357, protein: 7, carbs: 84, fat: 0.9 } },
+  { name: "Honig", per100: { kcal: 304, protein: 0.3, carbs: 82, fat: 0 } },
+  { name: "Nutella", per100: { kcal: 539, protein: 6, carbs: 57, fat: 31 } },
+  { name: "Erdnussbutter", per100: { kcal: 588, protein: 25, carbs: 20, fat: 50 } },
+  { name: "Walnüsse", per100: { kcal: 654, protein: 15, carbs: 14, fat: 65 } },
+  { name: "Cashewkerne", per100: { kcal: 553, protein: 18, carbs: 30, fat: 44 } },
+  { name: "Dunkle Schokolade (85%)", per100: { kcal: 592, protein: 10, carbs: 19, fat: 50 } },
+  { name: "Orange", per100: { kcal: 47, protein: 0.9, carbs: 12, fat: 0.1 } },
+  { name: "Heidelbeeren", per100: { kcal: 57, protein: 0.7, carbs: 14, fat: 0.3 } },
+  { name: "Erdbeeren", per100: { kcal: 32, protein: 0.7, carbs: 8, fat: 0.3 } },
+  { name: "Weintrauben", per100: { kcal: 69, protein: 0.7, carbs: 18, fat: 0.2 } },
+  { name: "Bier (Pils)", per100: { kcal: 43, protein: 0.5, carbs: 3.6, fat: 0 } },
+  { name: "Rotwein", per100: { kcal: 85, protein: 0.1, carbs: 2.6, fat: 0 } },
+  { name: "Cola", per100: { kcal: 42, protein: 0, carbs: 10.6, fat: 0 } },
+  { name: "Orangensaft", per100: { kcal: 45, protein: 0.7, carbs: 10, fat: 0.2 } },
+  { name: "Proteinriegel", per100: { kcal: 350, protein: 33, carbs: 30, fat: 9 } }
+];
+// Haushalts-Portionen für die Schnell-Mengen-Chips (g pro Einheit)
+const PORTIONS = [
+  { t: "Scheibe Brot", g: 45 }, { t: "Ei", g: 60 }, { t: "Handvoll", g: 30 },
+  { t: "Glas (250 ml)", g: 250 }, { t: "Tasse", g: 200 }, { t: "EL", g: 15 }, { t: "TL", g: 5 }
 ];
 
 const DEFAULT = {
-  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70 },
+  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500 },
   entries: [], weights: [], photos: [], foods: [],
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {}, // { "2026-06-11": { suppId: true } }
   journal: {}, // { "2026-06-11": { flags:{}, mood:3, note:"" } }
-  bodyLog: {}  // { "2026-06-11": { recovery, hrv, rhr, sleepH, sleepPerf, strain } }
+  bodyLog: {}, // { "2026-06-11": { recovery, hrv, rhr, sleepH, sleepPerf, strain } }
+  water: {}    // { "2026-06-11": ml }
 };
 const JFLAGS = [
   { k: "alkohol", t: "🍺 Alkohol" }, { k: "spaet", t: "🌙 spät gegessen" },
@@ -83,7 +140,8 @@ function load() {
       suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
       foods: Array.isArray(db.foods) ? db.foods : [],
       journal: db.journal && typeof db.journal === "object" ? db.journal : {},
-      bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {}
+      bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {},
+      water: db.water && typeof db.water === "object" ? db.water : {}
     };
   } catch (e) { console.error("load failed", e); return clone(DEFAULT); }
 }
@@ -170,8 +228,22 @@ function renderMeals() {
     div.appendChild(add);
     card.appendChild(div);
   }
+  const rep = document.createElement("button");
+  rep.className = "ghost"; rep.style.cssText = "width:100%;margin-top:8px";
+  rep.textContent = "↻ Gestern wiederholen";
+  rep.onclick = copyYesterday;
+  card.appendChild(rep);
 }
-function renderDiary() { renderSummary(); renderMeals(); }
+function copyYesterday() {
+  const dt = new Date(selDate + "T00:00:00"); dt.setDate(dt.getDate() - 1);
+  const prev = dt.toISOString().slice(0, 10);
+  const items = state.entries.filter(e => e.date === prev);
+  if (!items.length) return alert("Für gestern gibt es keine Einträge zum Übernehmen.");
+  if (!confirm(`${items.length} Einträge von gestern (${prev}) auf heute übernehmen?`)) return;
+  for (const e of items) state.entries.push({ id: uid(), date: selDate, meal: e.meal, name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
+  persist(); renderDiary();
+}
+function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
 
 // ---------- supplements ----------
 function suppTakenMap() { return state.suppLog[selDate] || (state.suppLog[selDate] = {}); }
@@ -251,6 +323,7 @@ function openSheet(meal, entry) {
   $("#fCarbs").value = entry ? entry.carbs : "";
   $("#fFat").value = entry ? entry.fat : "";
   $("#searchInput").value = ""; $("#results").innerHTML = ""; $("#per100hint").textContent = "";
+  const vb = $("#visionBox"); if (vb) vb.innerHTML = "";
   $("#saveEntry").textContent = entry ? "Speichern" : "Hinzufügen";
   renderFavChips();
   showSheet("food", true);
@@ -572,7 +645,7 @@ function switchTab(tab) {
   if (tab === "weight") drawWeightChart();
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
-  if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); }
+  if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); renderWeekReport(); }
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -713,7 +786,7 @@ async function loadHistory(force) {
       persist();
     }
   } catch {}
-  drawTrend(); renderInsights();
+  drawTrend(); renderInsights(); renderSuppInsights(); renderWeekReport();
 }
 function bodyDays(n) {
   return Object.keys(state.bodyLog).sort().slice(-n).map(date => ({ date, ...state.bodyLog[date] }));
@@ -770,8 +843,184 @@ function renderInsights() {
 }
 on("#histRefresh", "click", () => loadHistory(true));
 
+// ---------- Foto-KI: Essen erkennen (Gemini Vision über Worker) ----------
+on("#photoFoodBtn", "click", () => $("#foodPhotoInput").click());
+on("#foodPhotoInput", "change", async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  const box = $("#visionBox"); if (!box) return;
+  const k = whoopKey();
+  if (!k) { box.innerHTML = `<div class="vision-msg err">⚠ Für die Foto-Erkennung einmalig im Körper-Tab (🫀) den App-Schlüssel hinterlegen — derselbe wie für Whoop.</div>`; return; }
+  box.innerHTML = `<div class="vision-msg">🔎 Essen wird erkannt… (ein paar Sekunden)</div>`;
+  try {
+    const dataUrl = await resizeImage(file, 900, 0.7);
+    const r = await fetch(WHOOP_WORKER + "/vision/food", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-App-Token": k },
+      body: JSON.stringify({ image: dataUrl })
+    });
+    const d = await r.json();
+    if (!d || !d.ok) {
+      const why = d && d.error === "unauthorized" ? "App-Schlüssel stimmt nicht" : (d && d.error) || "unbekannt";
+      box.innerHTML = `<div class="vision-msg err">Erkennung fehlgeschlagen (${esc(why)}). Bitte manuell eintragen.</div>`;
+      return;
+    }
+    renderVision(d);
+  } catch (err) {
+    box.innerHTML = `<div class="vision-msg err">Server nicht erreichbar (offline?) — manuell eintragen.</div>`;
+  }
+});
+function renderVision(d) {
+  const box = $("#visionBox"); if (!box) return;
+  if (!d.items || !d.items.length) {
+    box.innerHTML = `<div class="vision-msg">Kein Essen erkannt${d.note ? " — " + esc(d.note) : ""}. Klareres Foto versuchen oder manuell eintragen.</div>`;
+    return;
+  }
+  let html = `<div class="vision-head">🍽️ Erkannt — antippen zum Übernehmen (alles bleibt editierbar):</div>`;
+  d.items.forEach((it, i) => {
+    const conf = it.confidence != null ? Math.round(it.confidence * 100) : null;
+    html += `<div class="vision-item" data-i="${i}">
+      <div class="vinfo"><div class="nm">${esc(it.name)}</div>
+      <div class="sub">${Math.round(it.grams)} g · ${Math.round(it.kcal)} kcal · ${round1(it.protein)}P / ${round1(it.carbs)}K / ${round1(it.fat)}F${conf != null ? ` · ${conf}% sicher` : ""}</div></div>
+      <button class="vadd" data-i="${i}">+ Eintrag</button></div>`;
+  });
+  if (d.note) html += `<div class="vision-msg">ℹ️ ${esc(d.note)}</div>`;
+  if (d.items.length > 1) html += `<button class="ghost" id="visionAddAll" style="width:100%;margin-top:8px">Alle ${d.items.length} direkt hinzufügen</button>`;
+  box.innerHTML = html;
+  box.querySelectorAll(".vadd").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); fillFromVision(d.items[+b.dataset.i]); });
+  box.querySelectorAll(".vision-item .vinfo").forEach(el => el.onclick = () => fillFromVision(d.items[+el.parentElement.dataset.i]));
+  const all = $("#visionAddAll"); if (all) all.onclick = () => addVisionAll(d.items);
+}
+function fillFromVision(it) {
+  per100 = it.grams > 0 ? { kcal: it.kcal / it.grams * 100, protein: it.protein / it.grams * 100, carbs: it.carbs / it.grams * 100, fat: it.fat / it.grams * 100 } : null;
+  $("#fName").value = it.name;
+  $("#fGrams").value = Math.round(it.grams) || 100;
+  $("#fKcal").value = Math.round(it.kcal);
+  $("#fProtein").value = round1(it.protein);
+  $("#fCarbs").value = round1(it.carbs);
+  $("#fFat").value = round1(it.fat);
+  $("#per100hint").textContent = "Aus Foto geschätzt — Menge/Werte oben bei Bedarf anpassen, dann Hinzufügen.";
+  $("#visionBox").innerHTML = "";
+  $("#fName").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function addVisionAll(items) {
+  const meal = $("#mealSelect").value || "snack";
+  for (const it of items) {
+    const e = { date: selDate, meal, name: it.name, grams: Math.round(it.grams) || 0, kcal: Math.round(it.kcal), protein: round1(it.protein), carbs: round1(it.carbs), fat: round1(it.fat) };
+    state.entries.push({ id: uid(), ...e }); rememberFood(e);
+  }
+  persist(); showSheet("food", false); renderDiary();
+}
+
+// ---------- Wasser ----------
+function waterMl() { return state.water[selDate] || 0; }
+function renderWater() {
+  if (!$("#waterCard")) return;
+  const ml = waterMl(), tgt = state.profile.waterTarget || 2500;
+  const val = $("#waterVal");
+  if (val) val.textContent = (ml / 1000).toFixed(ml % 1000 ? 2 : 1) + " / " + (tgt / 1000).toFixed(1) + " L";
+  const dots = $("#waterDots");
+  if (dots) {
+    const n = Math.max(1, Math.round(tgt / 250)), filled = Math.round(ml / 250);
+    dots.innerHTML = "";
+    for (let i = 0; i < n; i++) { const s = document.createElement("span"); s.className = "wdot" + (i < filled ? " on" : ""); s.textContent = "💧"; dots.appendChild(s); }
+  }
+}
+on("#waterPlus", "click", () => { state.water[selDate] = waterMl() + 250; persist(); renderWater(); });
+on("#waterMinus", "click", () => { state.water[selDate] = Math.max(0, waterMl() - 250); persist(); renderWater(); });
+
+// ---------- Heute-Status (Körper-Kurzblick direkt im Tagebuch) ----------
+function renderTodayBody() {
+  const card = $("#todayBody"); if (!card) return;
+  const b = state.bodyLog[selDate];
+  if (!b || (b.recovery == null && b.sleepH == null && b.strain == null)) { card.style.display = "none"; return; }
+  card.style.display = "block";
+  const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
+  const amp = b.recovery == null ? "" : b.recovery >= 67 ? "🟢" : b.recovery >= 34 ? "🟡" : "🔴";
+  set("tbRec", b.recovery != null ? amp + " " + b.recovery + "%" : "–");
+  set("tbSleep", b.sleepH != null ? b.sleepH + " h" : "–");
+  set("tbStrain", b.strain != null ? b.strain : "–");
+  let reco;
+  if (b.recovery != null && b.recovery < 34) reco = "Erholung niedrig — heute leichter trainieren, genug Eiweiß + früh schlafen.";
+  else if (b.strain != null && b.strain >= 14) reco = "Hohe Belastung — auf genug kcal + Eiweiß für die Regeneration achten.";
+  else if (b.recovery != null && b.recovery >= 67) reco = "Gut erholt — guter Tag für eine intensive Einheit.";
+  else reco = "Solider Tag — Ziele im Blick behalten.";
+  set("tbReco", reco);
+}
+
+// ---------- Wochen-Report (letzte 7 Tage) ----------
+function renderWeekReport() {
+  const grid = $("#weekGrid"); if (!grid) return;
+  const days = [];
+  for (let i = 6; i >= 0; i--) { const dt = new Date(today() + "T00:00:00"); dt.setDate(dt.getDate() - i); days.push(dt.toISOString().slice(0, 10)); }
+  const kcals = [], prots = [], recs = [], sleeps = [];
+  const kT = state.profile.kcalTarget || 0, pT = proteinTarget();
+  let proteinHits = 0, daysLogged = 0;
+  for (const d of days) {
+    const es = state.entries.filter(e => e.date === d);
+    if (es.length) {
+      daysLogged++;
+      kcals.push(es.reduce((a, e) => a + e.kcal, 0));
+      const p = es.reduce((a, e) => a + e.protein, 0); prots.push(p);
+      if (pT && p >= pT * 0.9) proteinHits++;
+    }
+    const b = state.bodyLog[d];
+    if (b) { if (b.recovery != null) recs.push(b.recovery); if (b.sleepH != null) sleeps.push(b.sleepH); }
+  }
+  const avg = a => a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null;
+  const avg1 = a => a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length * 10) / 10 : null;
+  const cell = (val, lbl, sub) => `<div class="bcard"><div class="bval">${val == null ? "–" : val}</div><div class="blbl">${lbl}</div><div class="bsub">${sub || ""}</div></div>`;
+  grid.innerHTML =
+    cell(avg(kcals), "Ø kcal", kT ? "Ziel " + kT : "") +
+    cell(avg(prots) != null ? avg(prots) + " g" : null, "Ø Eiweiß", pT ? "Ziel " + pT + " g" : "") +
+    cell(daysLogged + "/7", "Tage geloggt", "Essen") +
+    cell(pT ? proteinHits + "/" + daysLogged : null, "Eiweiß-Ziel", "Tage erreicht") +
+    cell(avg(recs) != null ? avg(recs) + "%" : null, "Ø Recovery", recs.length ? recs.length + " Tage" : "") +
+    cell(avg1(sleeps) != null ? avg1(sleeps) + " h" : null, "Ø Schlaf", "");
+}
+
+// ---------- Supplement → Recovery am Folgetag ----------
+function renderSuppInsights() {
+  const box = $("#insights"); if (!box) return;
+  const rows = [];
+  for (const date of Object.keys(state.bodyLog)) {
+    const b = state.bodyLog[date]; if (!b || b.recovery == null) continue;
+    const dt = new Date(date + "T00:00:00"); dt.setDate(dt.getDate() - 1);
+    const prev = dt.toISOString().slice(0, 10);
+    rows.push({ rec: b.recovery, taken: state.suppLog[prev] || {} });
+  }
+  if (rows.length < 5) return;
+  const out = [];
+  for (const s of state.supplements) {
+    const withS = rows.filter(r => r.taken[s.id]), without = rows.filter(r => !r.taken[s.id]);
+    if (withS.length >= 3 && without.length >= 3) {
+      const avg = a => Math.round(a.reduce((x, r) => x + r.rec, 0) / a.length);
+      const diff = avg(withS) - avg(without);
+      if (Math.abs(diff) >= 4) out.push({ name: s.name, aw: avg(withS), ao: avg(without), diff });
+    }
+  }
+  if (!out.length) return;
+  out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  box.insertAdjacentHTML("beforeend", `<h3 class="bsec" style="margin-top:14px">Supplements → Recovery am Folgetag</h3>` +
+    out.slice(0, 3).map(o => {
+      const good = o.diff > 0;
+      return `<div class="insight ${good ? "good" : "bad"}">${good ? "🟢" : "🔻"} <b>${esc(o.name)}</b>: Folgetag-Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
+    }).join(""));
+}
+
+// ---------- Haushalts-Portionen als zusätzliche Schnell-Mengen-Chips ----------
+(function addPortionChips() {
+  const wrap = $("#amountChips"); if (!wrap) return;
+  for (const p of PORTIONS) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.g = p.g; b.textContent = p.t;
+    b.onclick = () => { $("#fGrams").value = p.g; applyPer100(); };
+    wrap.appendChild(b);
+  }
+})();
+
 // ---------- boot ----------
-function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); }
+function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); }
 try {
   $("#datePicker").value = selDate;
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;

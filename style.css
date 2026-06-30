@@ -219,3 +219,18 @@ h3.bsec { font-size: 12px; color: var(--muted); text-transform: uppercase; lette
 .insight.good { border-left: 3px solid var(--green); }
 .insight.bad { border-left: 3px solid var(--red); }
 .insight .idiff { color: var(--muted); }
+
+/* ===== v10: Foto-KI, Wasser ===== */
+#visionBox:empty { display: none; }
+.vision-head { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+.vision-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--card2); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
+.vision-item .vinfo { flex: 1; min-width: 0; cursor: pointer; }
+.vision-item .vinfo .nm { font-weight: 600; }
+.vision-item .vinfo .sub { font-size: 12px; color: var(--muted); }
+.vision-item .vadd { background: var(--gold); color: #1a1a1a; border: none; border-radius: 9px; padding: 9px 12px; font-weight: 700; font-size: 13px; flex: 0 0 auto; }
+.vision-msg { font-size: 13px; color: var(--muted); background: var(--card2); border: 1px solid var(--line); border-radius: 10px; padding: 11px; margin: 6px 0; }
+.vision-msg.err { color: #ffb3bd; background: #3a1d22; border-color: #5c2a32; }
+
+.water-dots { display: flex; flex-wrap: wrap; gap: 5px; font-size: 20px; line-height: 1; }
+.water-dots .wdot { filter: grayscale(1) opacity(.32); transition: filter .2s; }
+.water-dots .wdot.on { filter: none; }

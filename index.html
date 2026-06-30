@@ -52,6 +52,27 @@
         </div>
       </div>
 
+      <!-- Heute · Körper-Kurzblick (nur wenn Whoop-Daten vorliegen) -->
+      <div class="card" id="todayBody" style="display:none">
+        <h2>Heute · Körper</h2>
+        <div class="body-grid">
+          <div class="bcard"><div class="bval" id="tbRec">–</div><div class="blbl">Recovery</div></div>
+          <div class="bcard"><div class="bval" id="tbSleep">–</div><div class="blbl">Schlaf</div></div>
+          <div class="bcard"><div class="bval" id="tbStrain">–</div><div class="blbl">Strain</div></div>
+        </div>
+        <p class="hint" id="tbReco"></p>
+      </div>
+
+      <!-- Wasser -->
+      <div class="card" id="waterCard">
+        <div class="body-head"><h2 style="margin:0">💧 Wasser</h2><span id="waterVal" class="ring-sub" style="margin:0">0 / 2.5 L</span></div>
+        <div class="water-dots" id="waterDots"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost" id="waterMinus" style="max-width:64px">−</button>
+          <button class="primary" id="waterPlus">+ Glas (250 ml)</button>
+        </div>
+      </div>
+
       <div class="card" id="mealsCard"><!-- meals injected --></div>
     </section>
 
@@ -128,6 +149,12 @@
         <div class="trend-legend"><span class="lg rec">Recovery %</span> <span class="lg slp">Schlaf h</span></div>
         <h3 class="bsec">Was dir gut tut</h3>
         <div id="insights"><p class="hint">Wird berechnet, sobald ein paar Journal-Tage zusammenkommen (≈1 Woche).</p></div>
+      </div>
+
+      <!-- Wochen-Report -->
+      <div class="card" id="weekCard">
+        <h2>Wochen-Report (7 Tage)</h2>
+        <div class="body-grid" id="weekGrid"></div>
       </div>
     </section>
 
@@ -213,6 +240,9 @@
       </select>
     </div>
 
+    <button class="primary scanbtn" id="photoFoodBtn" style="margin-bottom:10px">🍽️ Essen fotografieren (KI erkennt Nährwerte)</button>
+    <input type="file" accept="image/*" capture="environment" id="foodPhotoInput" style="display:none" />
+    <div id="visionBox"></div>
     <div class="row" style="margin-bottom:10px">
       <button class="ghost scanbtn" id="scanBtn" style="margin:0">📷 Barcode</button>
       <button class="ghost scanbtn" id="manualBarcodeBtn" style="margin:0">⌨️ EAN eingeben</button>

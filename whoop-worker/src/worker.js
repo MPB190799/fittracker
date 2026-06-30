@@ -14,7 +14,7 @@ function corsHeaders(origin, env) {
   return {
     "Access-Control-Allow-Origin": o,
     "Access-Control-Allow-Headers": "X-App-Token, Content-Type",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Vary": "Origin"
   };
 }
@@ -164,12 +164,77 @@ export default {
       return json({ connected: true, days }, 200, ch);
     }
 
+    // 6) Foto → Essen erkennen (Gemini Vision, Free-Tier) — Bild rein, Nährwerte raus
+    if (path === "/vision/food") {
+      if (req.method !== "POST") return json({ error: "method" }, 405, ch);
+      if (key !== env.APP_TOKEN) return json({ ok: false, error: "unauthorized" }, 401, ch);
+      if (!env.GEMINI_API_KEY) return json({ ok: false, error: "no_key" }, 200, ch);
+      let body;
+      try { body = await req.json(); } catch { return json({ ok: false, error: "bad_body" }, 400, ch); }
+      const raw = String(body.image || "");
+      const m = raw.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+      const mime = m ? m[1] : "image/jpeg";
+      const b64 = m ? m[2] : raw;
+      if (!b64 || b64.length < 50) return json({ ok: false, error: "no_image" }, 400, ch);
+      try {
+        const out = await geminiFood(env.GEMINI_API_KEY, mime, b64);
+        return json({ ok: true, ...out }, 200, ch);
+      } catch (e) {
+        return json({ ok: false, error: String(e && e.message || e) }, 200, ch);
+      }
+    }
+
     return new Response("FitTracker Whoop Worker — ok", { status: 200, headers: { "Content-Type": "text/plain" } });
   }
 };
 
 function num(v) { return v != null ? Math.round(v) : null; }
 function hrs(milli) { return milli != null && milli > 0 ? Math.round(milli / 360000) / 10 : null; } // ms → Stunden (1 Dezimal)
+
+// ---- Gemini Vision: Essensfoto → erkannte Speisen + geschätzte Nährwerte ----
+const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+function clampNum(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return Math.max(lo, Math.min(hi, Math.round(v * 10) / 10)); }
+const FOOD_PROMPT =
+  'Du bist Ernährungswissenschaftler. Analysiere das Foto von Essen/Getränk.\n' +
+  'Trenne JEDE einzelne Komponente auf dem Teller (z.B. Reis, Hähnchen, Salat separat).\n' +
+  'Schätze für JEDES Item realistisch die sichtbare Portionsgröße in Gramm und die Nährwerte FÜR DIESE PORTION (nicht pro 100 g).\n' +
+  'Antworte AUSSCHLIESSLICH mit reinem JSON nach exakt diesem Schema, ohne Markdown/Code-Fences/Erklärung:\n' +
+  '{"items":[{"name":"deutscher Name","grams":Zahl,"kcal":Zahl,"protein":Zahl,"carbs":Zahl,"fat":Zahl,"confidence":0_bis_1}],"note":"kurzer deutscher Hinweis bei Unsicherheit, sonst leer"}\n' +
+  'Ist kein Essen erkennbar: {"items":[],"note":"Kein Essen auf dem Foto erkannt"}.';
+
+async function geminiFood(apiKey, mime, b64) {
+  const reqBody = {
+    contents: [{ parts: [{ text: FOOD_PROMPT }, { inline_data: { mime_type: mime, data: b64 } }] }],
+    generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 1024 }
+  };
+  let lastErr = "unknown";
+  for (const model of GEMINI_MODELS) {
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
+    let r;
+    try { r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reqBody) }); }
+    catch (e) { lastErr = "fetch_" + (e && e.message || e); continue; }
+    if (r.status === 404) { lastErr = "model_404_" + model; continue; }   // Modell nicht verfügbar → nächstes
+    if (!r.ok) { lastErr = "gemini_" + r.status; continue; }
+    const data = await r.json();
+    const txt = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+    const raw = (txt[0] && txt[0].text) || "";
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch { const mm = raw.match(/\{[\s\S]*\}/); try { parsed = mm ? JSON.parse(mm[0]) : null; } catch { parsed = null; } }
+    if (!parsed) { lastErr = "unparsable"; continue; }
+    const items = (parsed.items || []).map(it => ({
+      name: String(it.name || "").trim().slice(0, 60),
+      grams: clampNum(it.grams, 0, 5000),
+      kcal: clampNum(it.kcal, 0, 6000),
+      protein: clampNum(it.protein, 0, 600),
+      carbs: clampNum(it.carbs, 0, 600),
+      fat: clampNum(it.fat, 0, 600),
+      confidence: clampNum(it.confidence, 0, 1)
+    })).filter(it => it.name);
+    return { items, note: String(parsed.note || "").slice(0, 200), model };
+  }
+  throw new Error(lastErr);
+}
 
 async function saveTokens(env, tok) {
   const rec = {
