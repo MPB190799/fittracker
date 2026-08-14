@@ -1,7 +1,8 @@
 // FitTracker — Whoop OAuth- & Daten-Proxy (Cloudflare Worker)
 // Hält das client_secret sicher, macht den OAuth-Token-Tausch + rotierenden Refresh,
 // speichert Tokens in KV (Single-User), liefert der PWA kompaktes JSON.
-// Endpunkte: /auth/start, /auth/callback, /status, /whoop/today
+// Endpunkte: /auth/start, /auth/callback, /status, /whoop/today, /whoop/history,
+// /vision/food, /food/search
 
 const WHOOP_AUTH = "https://api.prod.whoop.com/oauth/oauth2/auth";
 const WHOOP_TOKEN = "https://api.prod.whoop.com/oauth/oauth2/token";
@@ -181,6 +182,27 @@ export default {
         return json({ ok: true, ...out }, 200, ch);
       } catch (e) {
         return json({ ok: false, error: String(e && e.message || e) }, 200, ch);
+      }
+    }
+
+    // 7) Lebensmittel-Suche (Open Food Facts, server-seitig) — search.openfoodfacts.org
+    // sendet an den Browser KEINEN Access-Control-Allow-Origin-Header (bestätigt per curl),
+    // Direkt-Fetch aus der PWA ist deshalb immer CORS-blockiert. Server-zu-Server geht das nicht an.
+    if (path === "/food/search") {
+      if (key !== env.APP_TOKEN) return json({ error: "unauthorized" }, 401, ch);
+      const q = (url.searchParams.get("q") || "").trim();
+      if (q.length < 2) return json({ hits: [] }, 200, ch);
+      try {
+        const off = new URL("https://search.openfoodfacts.org/search");
+        off.searchParams.set("q", q);
+        off.searchParams.set("page_size", "25");
+        off.searchParams.set("lang", "de");
+        off.searchParams.set("fields", "product_name,product_name_de,brands,nutriments,code");
+        const r = await fetch(off.toString());
+        const data = await r.json();
+        return json({ hits: data.hits || data.products || [] }, 200, ch);
+      } catch (e) {
+        return json({ hits: [], error: String(e && e.message || e) }, 200, ch);
       }
     }
 

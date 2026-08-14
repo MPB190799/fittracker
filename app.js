@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v10.1 · 2026-06-30";
+const APP_VERSION = "v11 · 2026-08-14";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -339,6 +339,9 @@ function showSheet(which, on) {
   const sh = which === "supp" ? "#suppSheet" : "#addSheet";
   $(bg).classList.toggle("show", on);
   $(sh).classList.toggle("show", on);
+  // Sheets werden nur per transform aus dem Bild geschoben (kein display:none) — ohne inert
+  // bleiben sie für Tastatur/Screenreader erreichbar, obwohl sie unsichtbar sind.
+  $(sh).toggleAttribute("inert", !on);
   if (!on && which === "food") stopScan();
 }
 function applyPer100() {
@@ -348,6 +351,20 @@ function applyPer100() {
   $("#fProtein").value = round1(per100.protein * g / 100);
   $("#fCarbs").value = round1(per100.carbs * g / 100);
   $("#fFat").value = round1(per100.fat * g / 100);
+}
+// Für Mengen-Chips: mit bekannter Quelle (Suche/Barcode/Foto/Favorit) exakt aus per100 neu
+// rechnen; bei manuell eingetragenen Werten (kein per100) proportional zum Gramm-Verhältnis
+// skalieren, statt die alten Makros bei geänderter Menge einfach stehen zu lassen.
+function setGramsScaled(newG) {
+  const gEl = $("#fGrams");
+  const oldG = Number(gEl.value) || 0;
+  gEl.value = newG;
+  if (per100) { applyPer100(); return; }
+  if (oldG > 0 && newG !== oldG) {
+    const ratio = newG / oldG;
+    const scale = (id, round) => { const el = $("#" + id); el.value = round(( Number(el.value) || 0) * ratio); };
+    scale("fKcal", Math.round); scale("fProtein", round1); scale("fCarbs", round1); scale("fFat", round1);
+  }
 }
 
 // ---------- Open Food Facts ----------
@@ -372,15 +389,18 @@ async function offSearch(q) {
   const local = localMatches(q);
   const seen = new Set(local.map(x => x.name.toLowerCase()));
   renderResults(local.length ? local : [{ name: "Suche…", per100: { kcal: 0, protein: 0 }, _ph: true }]);
-  // 2) Open Food Facts (neue Search-API) dazu
+  // 2) Open Food Facts dazu — NUR über den Worker-Proxy: search.openfoodfacts.org sendet an den
+  // Browser keinen Access-Control-Allow-Origin-Header, ein Direkt-Fetch ist deshalb immer
+  // CORS-blockiert (bestätigt). Ohne App-Schlüssel (Worker-Zugang) bleibt es bei lokalen Treffern.
+  const k = whoopKey();
+  if (!k) { renderResults(local); return; }
   try {
-    const url = "https://search.openfoodfacts.org/search?q=" + encodeURIComponent(q) +
-      "&page_size=25&lang=de&fields=product_name,product_name_de,brands,nutriments,code";
+    const url = WHOOP_WORKER + "/food/search?q=" + encodeURIComponent(q);
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 9000);
-    const data = await (await fetch(url, { signal: ctrl.signal })).json();
+    const data = await (await fetch(url, { signal: ctrl.signal, headers: { "X-App-Token": k } })).json();
     clearTimeout(t);
-    const off = (data.hits || data.products || []).map(parseOFF).filter(Boolean).filter(it => !seen.has(it.name.toLowerCase()));
+    const off = (data.hits || []).map(parseOFF).filter(Boolean).filter(it => !seen.has(it.name.toLowerCase()));
     const all = local.concat(off);
     renderResults(all.length ? all : []);
   } catch {
@@ -454,12 +474,32 @@ function renderFavChips() {
     box.appendChild(b);
   }
 }
+function renderFoodsList() {
+  const box = $("#foodsList"); if (!box) return;
+  if (!state.foods.length) { box.innerHTML = `<div class="empty">Noch keine eigenen Lebensmittel — sammeln sich automatisch beim Eintragen.</div>`; return; }
+  const list = [...state.foods].sort((a, b) => (b.lastUsed || "").localeCompare(a.lastUsed || "") || (b.uses || 0) - (a.uses || 0));
+  box.innerHTML = "";
+  for (const f of list) {
+    const row = document.createElement("div");
+    row.className = "entry";
+    row.innerHTML = `<div class="info"><div class="nm">${esc(f.name)}</div>
+      <div class="sub">${Math.round(f.per100.kcal)} kcal/100g · ${f.uses || 1}× benutzt${f.lastUsed ? " · zuletzt " + esc(f.lastUsed) : ""}</div></div>
+      <button class="x" title="löschen">✕</button>`;
+    row.querySelector(".x").onclick = () => {
+      if (confirm(`„${f.name}" aus den eigenen Lebensmitteln löschen?`)) {
+        state.foods = state.foods.filter(x => x.id !== f.id);
+        persist(); renderFoodsList();
+      }
+    };
+    box.appendChild(row);
+  }
+}
 
 // ---------- Schnell-Mengen ----------
 document.querySelectorAll("#amountChips button").forEach(b => b.onclick = () => {
-  if (b.dataset.g) $("#fGrams").value = b.dataset.g;
-  else if (b.dataset.mult) { const g = Number($("#fGrams").value) || 100; $("#fGrams").value = Math.round(g * Number(b.dataset.mult)); }
-  applyPer100();
+  const cur = Number($("#fGrams").value) || 100;
+  const newG = b.dataset.g ? Number(b.dataset.g) : Math.round(cur * Number(b.dataset.mult));
+  setGramsScaled(newG);
 });
 
 // ---------- Barcode ----------
@@ -652,6 +692,7 @@ function switchTab(tab) {
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
   if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); renderWeekReport(); }
+  if (tab === "goals") renderFoodsList();
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -670,7 +711,7 @@ on("#fab", "click", () => {
 });
 
 // ---------- Onboarding (Erststart) ----------
-function showOb(on) { $("#obBg").classList.toggle("show", on); $("#obSheet").classList.toggle("show", on); }
+function showOb(on) { $("#obBg").classList.toggle("show", on); $("#obSheet").classList.toggle("show", on); $("#obSheet").toggleAttribute("inert", !on); }
 function finishOb() { try { localStorage.setItem("fittracker:onboarded", "1"); } catch {} showOb(false); }
 function maybeOnboard() {
   let seen = false; try { seen = !!localStorage.getItem("fittracker:onboarded"); } catch {}
@@ -779,18 +820,22 @@ on("#jnote", "input", (e) => { jToday().note = e.target.value; persist(); });
 
 // ---------- Verlauf + Insights ----------
 async function loadHistory(force) {
-  const k = whoopKey(); if (!k) return;
-  try {
-    const r = await fetch(WHOOP_WORKER + "/whoop/history?days=14", { headers: { "X-App-Token": k } });
-    const d = await r.json();
-    if (d && d.days) {
-      for (const day of d.days) {
-        const prev = state.bodyLog[day.date] || {};
-        state.bodyLog[day.date] = { ...prev, recovery: day.recovery, hrv: day.hrv, rhr: day.rhr, sleepH: day.sleepH, sleepPerf: day.sleepPerf, strain: day.strain };
+  // Netzwerk-Aufruf braucht den Whoop-Schlüssel — die Render-Funktionen darunter nicht: sie
+  // zeigen ohne Daten den korrekten Leer-Hinweis statt einer stumm leeren Fläche.
+  const k = whoopKey();
+  if (k) {
+    try {
+      const r = await fetch(WHOOP_WORKER + "/whoop/history?days=14", { headers: { "X-App-Token": k } });
+      const d = await r.json();
+      if (d && d.days) {
+        for (const day of d.days) {
+          const prev = state.bodyLog[day.date] || {};
+          state.bodyLog[day.date] = { ...prev, recovery: day.recovery, hrv: day.hrv, rhr: day.rhr, sleepH: day.sleepH, sleepPerf: day.sleepPerf, strain: day.strain };
+        }
+        persist();
       }
-      persist();
-    }
-  } catch {}
+    } catch {}
+  }
   drawTrend(); renderInsights(); renderSuppInsights(); renderWeekReport();
 }
 function bodyDays(n) {
@@ -1018,13 +1063,13 @@ function renderSuppInsights() {
   for (const p of PORTIONS) {
     const b = document.createElement("button");
     b.type = "button"; b.dataset.g = p.g; b.textContent = p.t;
-    b.onclick = () => { $("#fGrams").value = p.g; applyPer100(); };
+    b.onclick = () => setGramsScaled(p.g);
     wrap.appendChild(b);
   }
 })();
 
 // ---------- boot ----------
-function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); }
+function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); }
 try {
   $("#datePicker").value = selDate;
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
