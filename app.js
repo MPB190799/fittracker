@@ -134,22 +134,31 @@ let selDate = today();
 let per100 = null;
 
 // ---------- persistence ----------
+// Gemeinsame Absicherung für load() UND Backup-Import: ein rohes/fremdes/beschädigtes db-Objekt
+// (localStorage ODER eine importierte Backup-Datei) darf nie ein falsch typisiertes Feld
+// durchreichen — sonst crasht die App später an z.B. state.foods.push() auf einem String.
+function normalizeState(db) {
+  db = db && typeof db === "object" ? db : {};
+  return {
+    ...clone(DEFAULT), ...db,
+    profile: { ...DEFAULT.profile, ...(db.profile || {}) },
+    entries: Array.isArray(db.entries) ? db.entries : [],
+    weights: Array.isArray(db.weights) ? db.weights : [],
+    photos: Array.isArray(db.photos) ? db.photos : [],
+    // supplements nur seeden, wenn der Key komplett fehlt (Bestandsdaten ohne Tabletten-Feature)
+    supplements: Array.isArray(db.supplements) ? db.supplements : clone(DEFAULT.supplements),
+    suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
+    foods: Array.isArray(db.foods) ? db.foods : [],
+    journal: db.journal && typeof db.journal === "object" ? db.journal : {},
+    bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {},
+    water: db.water && typeof db.water === "object" ? db.water : {}
+  };
+}
 function load() {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return clone(DEFAULT);
-    const db = JSON.parse(raw);
-    return {
-      ...clone(DEFAULT), ...db,
-      profile: { ...DEFAULT.profile, ...(db.profile || {}) },
-      // supplements nur seeden, wenn der Key komplett fehlt (Bestandsdaten ohne Tabletten-Feature)
-      supplements: Array.isArray(db.supplements) ? db.supplements : clone(DEFAULT.supplements),
-      suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
-      foods: Array.isArray(db.foods) ? db.foods : [],
-      journal: db.journal && typeof db.journal === "object" ? db.journal : {},
-      bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {},
-      water: db.water && typeof db.water === "object" ? db.water : {}
-    };
+    return normalizeState(JSON.parse(raw));
   } catch (e) { console.error("load failed", e); return clone(DEFAULT); }
 }
 function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { showErr("Speichern fehlgeschlagen (Speicher voll?)."); } }
@@ -171,7 +180,7 @@ async function idbDel(id) { const db = await idb(); return new Promise((res, rej
 function latestWeight() { return state.weights.length ? state.weights[state.weights.length - 1].kg : null; }
 function proteinTarget() { const w = latestWeight(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 function dayEntries() { return state.entries.filter(e => e.date === selDate); }
-function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function round1(n) { return Math.round(n * 10) / 10; }
 function showErr(msg) { const b = $("#errbar"); if (b) { b.textContent = "⚠ " + msg; b.style.display = "block"; } }
 
@@ -575,7 +584,7 @@ function renderWeight() {
   [...state.weights].reverse().forEach(w => {
     const row = document.createElement("div");
     row.className = "entry";
-    row.innerHTML = `<div class="info"><div class="nm">${w.date}</div></div><div class="kc">${w.kg} kg</div><button class="x">✕</button>`;
+    row.innerHTML = `<div class="info"><div class="nm">${esc(w.date)}</div></div><div class="kc">${w.kg} kg</div><button class="x">✕</button>`;
     row.querySelector(".x").onclick = () => { state.weights = state.weights.filter(x => x.id !== w.id); persist(); renderWeight(); renderSummary(); fillGoals(); };
     list.appendChild(row);
   });
@@ -612,15 +621,17 @@ on("#photoInput", "change", async (e) => {
 function resizeImage(file, maxDim, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    const objUrl = URL.createObjectURL(file);
     img.onload = () => {
+      URL.revokeObjectURL(objUrl);
       let w = img.width, h = img.height;
       if (Math.max(w, h) > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
       const c = document.createElement("canvas"); c.width = w; c.height = h;
       c.getContext("2d").drawImage(img, 0, 0, w, h);
       resolve(c.toDataURL("image/jpeg", quality));
     };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    img.onerror = (e) => { URL.revokeObjectURL(objUrl); reject(e); };
+    img.src = objUrl;
   });
 }
 async function renderPhotos() {
@@ -629,7 +640,7 @@ async function renderPhotos() {
   for (const p of [...state.photos].reverse()) {
     const d = document.createElement("div");
     d.className = "photo";
-    d.innerHTML = `<img loading="lazy" /><div class="cap">${p.date}</div><button class="del">✕</button>`;
+    d.innerHTML = `<img loading="lazy" /><div class="cap">${esc(p.date)}</div><button class="del">✕</button>`;
     idbGet(p.id).then(url => { if (url) d.querySelector("img").src = url; });
     d.querySelector(".del").onclick = async () => { if (confirm("Foto löschen?")) { await idbDel(p.id); state.photos = state.photos.filter(x => x.id !== p.id); persist(); renderPhotos(); } };
     grid.appendChild(d);
@@ -646,9 +657,14 @@ function fillGoals() {
   $("#proteinCalc").textContent = w ? `= ${pt} g Eiweiß/Tag bei ${w} kg (zuletzt eingetragen).` : "Trag dein Gewicht ein → Eiweiß-Ziel rechnet sich automatisch.";
 }
 on("#saveGoals", "click", () => {
+  // Leeres/ungültiges Feld darf das Ziel nie stillschweigend auf 0 setzen (kaputt wirkender
+  // Ring ohne Erklärung) — dann lieber den bisherigen Wert behalten.
+  const keep = (val, fallback) => { const n = Number(val); return n > 0 ? n : fallback; };
   Object.assign(state.profile, {
-    kcalTarget: Number($("#goalKcal").value) || 0, proteinPerKg: Number($("#goalProteinPerKg").value) || 2,
-    carbTarget: Number($("#goalCarb").value) || 0, fatTarget: Number($("#goalFat").value) || 0
+    kcalTarget: keep($("#goalKcal").value, state.profile.kcalTarget),
+    proteinPerKg: keep($("#goalProteinPerKg").value, state.profile.proteinPerKg || 2),
+    carbTarget: keep($("#goalCarb").value, state.profile.carbTarget),
+    fatTarget: keep($("#goalFat").value, state.profile.fatTarget)
   });
   persist(); renderDiary(); fillGoals(); alert("Ziele gespeichert.");
 });
@@ -670,12 +686,7 @@ on("#importFile", "change", async (e) => {
   try {
     const data = JSON.parse(await file.text());
     if (!data.state) throw new Error("kein gültiges Backup");
-    state = {
-      ...clone(DEFAULT), ...data.state,
-      profile: { ...DEFAULT.profile, ...(data.state.profile || {}) },
-      supplements: Array.isArray(data.state.supplements) ? data.state.supplements : clone(DEFAULT.supplements),
-      suppLog: data.state.suppLog || {}
-    };
+    state = normalizeState(data.state);
     persist();
     for (const [id, url] of Object.entries(data.photos || {})) await idbPut(id, url);
     renderAll(); alert("Backup eingespielt.");
@@ -911,7 +922,11 @@ on("#foodPhotoInput", "change", async (e) => {
     });
     const d = await r.json();
     if (!d || !d.ok) {
-      const why = d && d.error === "unauthorized" ? "App-Schlüssel stimmt nicht" : (d && d.error) || "unbekannt";
+      const err = d && d.error;
+      const why = err === "unauthorized" ? "App-Schlüssel stimmt nicht"
+        : /^gemini_/.test(err || "") ? "Foto-KI-Dienst gerade nicht erreichbar (Gemini-Fehler)"
+        : err === "no_key" ? "Foto-KI serverseitig nicht eingerichtet"
+        : err || "unbekannt";
       box.innerHTML = `<div class="vision-msg err">Erkennung fehlgeschlagen (${esc(why)}). Bitte manuell eintragen.</div>`;
       return;
     }
