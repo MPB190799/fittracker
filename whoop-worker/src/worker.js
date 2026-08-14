@@ -165,11 +165,14 @@ export default {
       return json({ connected: true, days }, 200, ch);
     }
 
-    // 6) Foto → Essen erkennen (Gemini Vision, Free-Tier) — Bild rein, Nährwerte raus
+    // 6) Foto → Essen erkennen (Groq Vision) — Bild rein, Nährwerte raus
+    // War bis 14.08.2026 Gemini Vision (Free-Tier) — der Google-Cloud-Consumer wurde von
+    // Google gesperrt (CONSUMER_SUSPENDED, projektweit, kein Code-Bug), deshalb Umstieg auf
+    // Groq (Key war für die Flotte schon vorhanden). Nicht mehr 0€, aber ~0,1 Cent/Foto.
     if (path === "/vision/food") {
       if (req.method !== "POST") return json({ error: "method" }, 405, ch);
       if (key !== env.APP_TOKEN) return json({ ok: false, error: "unauthorized" }, 401, ch);
-      if (!env.GEMINI_API_KEY) return json({ ok: false, error: "no_key" }, 200, ch);
+      if (!env.GROQ_API_KEY) return json({ ok: false, error: "no_key" }, 200, ch);
       let body;
       try { body = await req.json(); } catch { return json({ ok: false, error: "bad_body" }, 400, ch); }
       const raw = String(body.image || "");
@@ -178,7 +181,7 @@ export default {
       const b64 = m ? m[2] : raw;
       if (!b64 || b64.length < 50) return json({ ok: false, error: "no_image" }, 400, ch);
       try {
-        const out = await geminiFood(env.GEMINI_API_KEY, mime, b64);
+        const out = await groqFood(env.GROQ_API_KEY, mime, b64);
         return json({ ok: true, ...out }, 200, ch);
       } catch (e) {
         return json({ ok: false, error: String(e && e.message || e) }, 200, ch);
@@ -213,8 +216,11 @@ export default {
 function num(v) { return v != null ? Math.round(v) : null; }
 function hrs(milli) { return milli != null && milli > 0 ? Math.round(milli / 360000) / 10 : null; } // ms → Stunden (1 Dezimal)
 
-// ---- Gemini Vision: Essensfoto → erkannte Speisen + geschätzte Nährwerte ----
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite"];
+// ---- Groq Vision: Essensfoto → erkannte Speisen + geschätzte Nährwerte ----
+// qwen/qwen3.6-27b ist (Stand 14.08.2026) das einzige Vision-fähige Modell im Groq-Katalog
+// (grep input_modalities:"image" gegen /openai/v1/models) — kein Fallback-Array nötig,
+// falls Groq das Modell ablöst: gegen den Katalog neu prüfen statt blind zu raten.
+const GROQ_VISION_MODEL = "qwen/qwen3.6-27b";
 function clampNum(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return Math.max(lo, Math.min(hi, Math.round(v * 10) / 10)); }
 const FOOD_PROMPT =
   'Du bist Ernährungswissenschaftler. Analysiere das Foto von Essen/Getränk.\n' +
@@ -224,38 +230,44 @@ const FOOD_PROMPT =
   '{"items":[{"name":"deutscher Name","grams":Zahl,"kcal":Zahl,"protein":Zahl,"carbs":Zahl,"fat":Zahl,"confidence":0_bis_1}],"note":"kurzer deutscher Hinweis bei Unsicherheit, sonst leer"}\n' +
   'Ist kein Essen erkennbar: {"items":[],"note":"Kein Essen auf dem Foto erkannt"}.';
 
-async function geminiFood(apiKey, mime, b64) {
+async function groqFood(apiKey, mime, b64) {
   const reqBody = {
-    contents: [{ parts: [{ text: FOOD_PROMPT }, { inline_data: { mime_type: mime, data: b64 } }] }],
-    generationConfig: { temperature: 0.2, responseMimeType: "application/json", maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } }
+    model: GROQ_VISION_MODEL,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "text", text: FOOD_PROMPT },
+        { type: "image_url", image_url: { url: "data:" + mime + ";base64," + b64 } }
+      ]
+    }],
+    temperature: 0.2,
+    max_tokens: 1024,
+    response_format: { type: "json_object" },
+    // Qwen denkt standardmäßig laut (Chain-of-Thought) und frisst damit das Token-Budget auf,
+    // bevor das eigentliche JSON kommt (finish_reason "length" statt "stop", leer geparst) —
+    // exakt dasselbe Muster wie bei Gemini 2.5+ (dort: thinkingConfig.thinkingBudget=0).
+    reasoning_effort: "none"
   };
-  let lastErr = "unknown";
-  for (const model of GEMINI_MODELS) {
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
-    let r;
-    try { r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(reqBody) }); }
-    catch (e) { lastErr = "fetch_" + (e && e.message || e); continue; }
-    if (r.status === 404) { lastErr = "model_404_" + model; continue; }   // Modell nicht verfügbar → nächstes
-    if (!r.ok) { lastErr = "gemini_" + r.status; continue; }
-    const data = await r.json();
-    const txt = (((data.candidates || [])[0] || {}).content || {}).parts || [];
-    const raw = (txt[0] && txt[0].text) || "";
-    let parsed;
-    try { parsed = JSON.parse(raw); }
-    catch { const mm = raw.match(/\{[\s\S]*\}/); try { parsed = mm ? JSON.parse(mm[0]) : null; } catch { parsed = null; } }
-    if (!parsed) { lastErr = "unparsable"; continue; }
-    const items = (parsed.items || []).map(it => ({
-      name: String(it.name || "").trim().slice(0, 60),
-      grams: clampNum(it.grams, 0, 5000),
-      kcal: clampNum(it.kcal, 0, 6000),
-      protein: clampNum(it.protein, 0, 600),
-      carbs: clampNum(it.carbs, 0, 600),
-      fat: clampNum(it.fat, 0, 600),
-      confidence: clampNum(it.confidence, 0, 1)
-    })).filter(it => it.name);
-    return { items, note: String(parsed.note || "").slice(0, 200), model };
-  }
-  throw new Error(lastErr);
+  let r;
+  try { r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey }, body: JSON.stringify(reqBody) }); }
+  catch (e) { throw new Error("fetch_" + (e && e.message || e)); }
+  if (!r.ok) throw new Error("groq_" + r.status);
+  const data = await r.json();
+  const raw = ((data.choices || [])[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch { const mm = raw.match(/\{[\s\S]*\}/); try { parsed = mm ? JSON.parse(mm[0]) : null; } catch { parsed = null; } }
+  if (!parsed) throw new Error("unparsable");
+  const items = (parsed.items || []).map(it => ({
+    name: String(it.name || "").trim().slice(0, 60),
+    grams: clampNum(it.grams, 0, 5000),
+    kcal: clampNum(it.kcal, 0, 6000),
+    protein: clampNum(it.protein, 0, 600),
+    carbs: clampNum(it.carbs, 0, 600),
+    fat: clampNum(it.fat, 0, 600),
+    confidence: clampNum(it.confidence, 0, 1)
+  })).filter(it => it.name);
+  return { items, note: String(parsed.note || "").slice(0, 200), model: GROQ_VISION_MODEL };
 }
 
 async function saveTokens(env, tok) {
