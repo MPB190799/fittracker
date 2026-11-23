@@ -217,7 +217,7 @@ function proteinBaseKg() {
 function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 // Übergabe an Marcos Lebenskompass (Tagebuch-App): nur über den #-Teil der Adresse, der nie an einen Server geht.
 // Hakt dort Gewohnheiten wie „Kcal-Ziel erreicht“ und genommene Supplements ab.
-const LK_URL = "https://lebenskompass.pages.dev/";
+const LK_URL = new URL("lebenskompass/", location.href).href; // liegt im selben Repo unter /lebenskompass/
 function lebenskompassLink() {
   const es = dayEntries();
   const kcal = es.reduce((a, e) => a + (+e.kcal || 0), 0);
