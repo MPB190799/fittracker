@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v20 · 2026-11-23";
+const APP_VERSION = "v21 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -215,6 +215,19 @@ function proteinBaseKg() {
   return w;
 }
 function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
+// Übergabe an Marcos Lebenskompass (Tagebuch-App): nur über den #-Teil der Adresse, der nie an einen Server geht.
+// Hakt dort Gewohnheiten wie „Kcal-Ziel erreicht“ und genommene Supplements ab.
+const LK_URL = "https://lebenskompass.pages.dev/";
+function lebenskompassLink() {
+  const es = dayEntries();
+  const kcal = es.reduce((a, e) => a + (+e.kcal || 0), 0);
+  const pinfo = phaseDayInfo(selDate);
+  const kT = (pinfo && pinfo.kcal) || state.profile.kcalTarget || 0;
+  const kcalOk = es.length > 0 && kT > 0 && kcal <= kT;
+  const taken = suppTakenMap();
+  const supp = state.supplements.filter(s => taken[s.id]).map(s => s.name);
+  return LK_URL + "#fit=" + selDate + "&kcal=" + (kcalOk ? 1 : 0) + "&supp=" + encodeURIComponent(supp.join("|"));
+}
 function dayEntries() { return state.entries.filter(e => e.date === selDate); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function round1(n) { return Math.round(n * 10) / 10; }
@@ -1245,6 +1258,7 @@ function switchTab(tab) {
   if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); renderWeekReport(); }
   if (tab === "goals") { renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); }
 }
+on("#toLK", "click", (e) => { e.currentTarget.href = lebenskompassLink(); });
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
 on("#nextDay", "click", () => shiftDay(1));
