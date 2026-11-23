@@ -153,6 +153,12 @@ svg text{font-family:'IBM Plex Mono',monospace;fill:var(--muted);font-size:10px}
 .bnav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 16px}
 .bnav button{background:none;border:1px solid var(--line2);color:var(--gold-hi);border-radius:12px;padding:10px 16px;font:inherit;font-size:.85rem;cursor:pointer}
 .bnav button[disabled]{opacity:.3;cursor:default}
+.quote{font-weight:200;font-size:1.25rem;line-height:1.5;font-style:italic;text-align:center;padding:6px 10px}
+.quote small{display:block;font-style:normal;font-size:.78rem;color:var(--muted);margin-top:8px;letter-spacing:.08em}
+.tplan{display:grid;grid-template-columns:54px 1fr;gap:6px 10px;align-items:center}
+.tplan span{font-family:'IBM Plex Mono',monospace;font-size:.8rem;color:var(--muted);text-align:right}
+.tplan input{padding:8px 12px!important;border-radius:9px!important}
+.prompt{display:block;font-size:.82rem;color:var(--muted);font-weight:300;margin:-10px 0 12px;letter-spacing:.02em}
 @media (max-width:560px){.abar{grid-template-columns:96px 1fr 48px}.slider{grid-template-columns:88px 1fr 34px}.chip{display:none}.hero h1{font-size:1.55rem}.wm{font-size:1.15rem;letter-spacing:.22em}}
 </style>
 </head>
@@ -241,7 +247,7 @@ function ensureDay(dt){
   if(!state.days[dt])state.days[dt]={tasks:[],ratings:{},gut:'',schlecht:'',gelernt:'',erfolge:['','',''],dankbar:'',intention:'',reviewed:false};
   var d=state.days[dt];d.tasks=d.tasks||[];d.ratings=d.ratings||{};
   if(!Array.isArray(d.erfolge))d.erfolge=['','',''];
-  while(d.erfolge.length<3)d.erfolge.push('');
+  while(d.erfolge.length<5)d.erfolge.push('');
   return d;
 }
 function tasksOf(dt){var d=state.days[dt];return d&&d.tasks?d.tasks:[];}
@@ -360,8 +366,8 @@ function viewHeute(){
   h+=habitCard();
   h+=challengeCard();
   var vc=visionCard(false);
-  h+='<div class="card"><h2>Aufgaben <small>Stern = Top 3</small></h2>'+(ts.length?'<ul class="tasks">'+ts.map(function(x){return taskRow(x,t);}).join('')+'</ul>':'<div class="hint">Keine Aufgaben.</div>')+addForm(t,'Neue Aufgabe für heute …')+'</div>';
-  h+=flashback()+vc;
+  h+='<div class="card"><h2>Tagesziele <small>Stern = Top 3</small></h2><span class="prompt">Wo liegt heute mein Fokus?</span>'+(ts.length?'<ul class="tasks">'+ts.map(function(x){return taskRow(x,t);}).join('')+'</ul>':'<div class="hint">Keine Aufgaben.</div>')+addForm(t,'Neue Aufgabe für heute …')+'</div>';
+  h+=timePlan(t)+quoteCard(t)+flashback()+vc;
   return h;
 }
 function tomb(dt,ids){var d=ensureDay(dt);d.del=(d.del||[]).concat(ids).slice(-200);}
@@ -373,13 +379,34 @@ function habitCard(){
   return '<div class="card"><h2>Gewohnheiten <small>heute abhaken · Serie in Tagen</small></h2><div class="pill">'+state.habits.map(function(x){var on=habitDone(t,x.id),st=habitStreak(x.id);
     return '<button type="button" data-a="habit" data-id="'+esc(x.id)+'" class="'+(on?'on':'')+'" aria-pressed="'+on+'" style="padding:10px 16px;font-size:.8rem">'+(on?'✓ ':'')+esc(x.name)+(st?' · '+st:'')+'</button>';}).join('')+'</div><div class="hint" style="margin-top:12px">Kalorien &amp; Ernährung trackst du in <a href="'+FIT_URL+'" target="_blank" rel="noopener" style="color:var(--gold-hi)">MB FIT öffnen ↗</a></div></div>';
 }
+var QUOTES=[['Das Geheimnis des Vorankommens ist, anzufangen.','Mark Twain'],['Nicht weil es schwer ist, wagen wir es nicht, sondern weil wir es nicht wagen, ist es schwer.','Seneca'],['Wir sind, was wir wiederholt tun.','nach Aristoteles'],['Es ist nicht wenig Zeit, die wir haben, sondern viel Zeit, die wir nicht nutzen.','Seneca'],['Auch eine Reise von tausend Meilen beginnt mit dem ersten Schritt.','Laozi'],['Es ist nicht genug zu wissen, man muss auch anwenden.','Goethe'],['Zinseszins ist das achte Weltwunder.','zugeschrieben Einstein'],['Eine Investition in Wissen bringt noch immer die besten Zinsen.','Benjamin Franklin'],['Die Qualität deiner Gedanken bestimmt die Qualität deines Lebens.','Marc Aurel'],['Wer will, findet Wege. Wer nicht will, findet Gründe.','Sprichwort'],['Disziplin ist die Brücke zwischen Zielen und Erfolg.','Jim Rohn'],['Es ist nicht entscheidend, wie langsam du gehst, solange du nicht stehen bleibst.','Konfuzius'],['Glück ist, was passiert, wenn Vorbereitung auf Gelegenheit trifft.','Seneca'],['Nicht die Dinge beunruhigen uns, sondern unsere Meinung über die Dinge.','Epiktet'],['Was du heute kannst besorgen, das verschiebe nicht auf morgen.','Sprichwort'],['Der beste Zeitpunkt, einen Baum zu pflanzen, war vor zwanzig Jahren. Der zweitbeste ist jetzt.','Sprichwort'],['Wer aufhört, besser zu werden, hat aufgehört, gut zu sein.','Philip Rosenthal'],['Geduld ist bitter, aber ihre Frucht ist süß.','Rousseau'],['Man muss das Unmögliche versuchen, um das Mögliche zu erreichen.','Hermann Hesse'],['Kleine Taten, die man ausführt, sind besser als große, die man plant.','George C. Marshall'],['Der Markt ist ein Mechanismus, der Geld von den Ungeduldigen zu den Geduldigen transferiert.','Warren Buffett'],['Wer immer tut, was er schon kann, bleibt immer das, was er schon ist.','Henry Ford'],['Erfolg ist die Summe kleiner Anstrengungen, die man Tag für Tag wiederholt.','Robert Collier'],['Fokus heißt Nein sagen.','Steve Jobs'],['Handle so, als wäre es unmöglich zu scheitern.','Dorothea Brande'],['Mut steht am Anfang des Handelns, Glück am Ende.','Demokrit'],['Die Zukunft hängt davon ab, was wir heute tun.','Mahatma Gandhi'],['Ordnung ist das halbe Leben.','Sprichwort'],['Das Leben wird vorwärts gelebt und rückwärts verstanden.','Kierkegaard'],['Wer kämpft, kann verlieren. Wer nicht kämpft, hat schon verloren.','Bertolt Brecht']];
+function quoteOf(dt){var n=Math.round((parse(dt)-parse('2026-01-01'))/864e5);return QUOTES[((n%QUOTES.length)+QUOTES.length)%QUOTES.length];}
+function quoteCard(dt){var q=quoteOf(dt);return '<div class="card"><h2>Zitat des Tages</h2><span class="prompt">Eine Prise Weisheit für den Tag</span><div class="quote">„'+esc(q[0])+'“<small>— '+esc(q[1])+'</small></div></div>';}
+var TIPS=[['2-Minuten-Regel','Was weniger als zwei Minuten dauert, sofort erledigen – nicht aufschreiben.'],['Aufgaben zerlegen','Große Aufgaben in Schritte von höchstens 30 Minuten teilen. Der erste Schritt muss lächerlich klein sein.'],['Handy außer Sicht','Schon ein sichtbares Smartphone kostet Konzentration. Beim Arbeiten in einen anderen Raum legen.'],['Eat the Frog','Die unangenehmste Top-Aufgabe zuerst – bevor Mails und Nachrichten kommen.'],['Zeitblöcke','Plane feste Blöcke für Deep Work (z. B. 90 Min.) und schütze sie wie Termine.'],['Wenn-Dann-Pläne','„Wenn ich um 5 Uhr aufstehe, dann ziehe ich direkt die Sportsachen an.“ Konkrete Auslöser machen Gewohnheiten leichter.'],['Gewohnheiten koppeln','Neue Gewohnheit an eine bestehende hängen: Nach dem Kaffee 10 Seiten lesen.'],['Nie zweimal auslassen','Ein verpasster Tag ist normal. Zwei verpasste Tage sind der Anfang einer neuen Gewohnheit.'],['Wochenreview','Sonntag 20 Minuten: Was lief, was nicht, was ist nächste Woche das Wichtigste?'],['Energie statt Zeit','Schwere Aufgaben in deine stärkste Tageszeit legen, Routine in die Tiefs.'],['Weniger Ziele','Drei Ziele, die du erreichst, schlagen zehn, die du anfängst.'],['Umgebung gestalten','Mach das Gute leicht und das Schlechte schwer: Sportsachen bereitlegen, Snacks wegräumen.']];
+function tipOf(ws){return TIPS[(isoWeek(ws)+parse(ws).getFullYear())%TIPS.length];}
+var HOURS=['05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22'];
+function timePlan(dt){
+  var d=state.days[dt]||{},pl=d.plan||{},has=Object.keys(pl).some(function(k){return pl[k];}),open=ui.tpOpen===dt||has;
+  if(!open)return '<div class="card"><h2>Zeitplan</h2><span class="prompt">Wie sieht mein Tag aus?</span><button class="btn ghost" data-a="tpopen" data-dt="'+dt+'">Zeitplan öffnen</button></div>';
+  return '<div class="card"><h2>Zeitplan</h2><span class="prompt">Wie sieht mein Tag aus?</span><div class="tplan">'+HOURS.map(function(hh){return '<span>'+hh+':00</span><input type="text" data-i="plan" data-dt="'+dt+'" data-k="'+hh+'" maxlength="80" value="'+esc(pl[hh]||'')+'" autocomplete="off">';}).join('')+'</div></div>';
+}
+function wheelRadar(cur,prev){
+  var areas=state.areas.slice(),n=areas.length,W=600,H=380,cx=W/2,cy=H/2,R=128,g='',lab='',i;
+  function pt(k,v){var a=-Math.PI/2+2*Math.PI*k/n;return {x:cx+Math.cos(a)*R*v/10,y:cy+Math.sin(a)*R*v/10,a:a};}
+  [2.5,5,7.5,10].forEach(function(v){g+='<polygon points="'+areas.map(function(_,k){var p=pt(k,v);return p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ')+'" fill="none" stroke="#1d1d33"/>';});
+  for(i=0;i<n;i++){var p=pt(i,10),q=pt(i,11.6);g+='<line x1="'+cx+'" y1="'+cy+'" x2="'+p.x.toFixed(1)+'" y2="'+p.y.toFixed(1)+'" stroke="#1d1d33"/>';
+    var an=Math.abs(Math.cos(q.a))<.2?'middle':(Math.cos(q.a)>0?'start':'end');lab+='<text x="'+q.x.toFixed(1)+'" y="'+(q.y+4).toFixed(1)+'" text-anchor="'+an+'">'+esc(areas[i])+(typeof cur[areas[i]]==='number'?' · '+cur[areas[i]]:'')+'</text>';}
+  function poly(vals,st){var ps=areas.map(function(a,k){var p=pt(k,typeof vals[a]==='number'?vals[a]:0);return p.x.toFixed(1)+','+p.y.toFixed(1);}).join(' ');return '<polygon points="'+ps+'" '+st+'/>';}
+  return '<div class="radar-wrap"><svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Lebensrad">'+g+(prev?poly(prev,'fill="none" stroke="#6b6b85" stroke-dasharray="4 4" stroke-width="1.3"'):'')+poly(cur,'fill="rgba(212,175,55,.18)" stroke="#D4AF37" stroke-width="2"')+lab+'</svg></div>'+
+    '<div class="legend"><span><i style="background:#D4AF37"></i>diese Woche</span>'+(prev?'<span><i style="background:#6b6b85"></i>Vorwoche</span>':'')+'</div>';
+}
 function planner(dt,ph){
   var ts=sorted(tasksOf(dt));
   return (ts.length?'<ul class="tasks">'+ts.map(function(x){return taskRow(x,dt,{noCheck:true,noMove:true});}).join('')+'</ul>':'<div class="hint">Noch nichts geplant.</div>')+addForm(dt,ph);
 }
 function viewMorgen(){
   var m=addDays(today(),1);
-  return '<div class="card"><h2>Morgen <small>'+esc(niceDate(m))+'</small></h2><div class="hint">Wähle bis zu 3 Top-Aufgaben mit dem Stern. Der Rest ist Beiwerk.</div>'+planner(m,'Was hast du morgen vor? …')+'</div>';
+  return '<div class="card"><h2>Tagesziele morgen <small>'+esc(niceDate(m))+'</small></h2><span class="prompt">Wo liegt morgen mein Fokus? Bis zu 3 Top-Aufgaben mit Stern.</span>'+planner(m,'Was hast du morgen vor? …')+'</div>'+timePlan(m);
 }
 function viewAbend(){
   var t=today(),d=ensureDay(t),ts=sorted(d.tasks);
@@ -396,15 +423,17 @@ function viewAbend(){
       (open.length?'<div class="row" style="margin-top:16px"><button class="btn ghost small" data-a="moveall">Alle '+open.length+' offenen auf morgen schieben</button></div>':'')+
       '</div><div class="row"><button class="btn" data-a="step" data-n="2">Weiter zur Bewertung</button></div>';
   }else if(ui.step===2){
-    h+='<div class="card"><h2>Wie war der Tag? <small>1 = schlecht · 10 = stark</small></h2>'+
+    h+='<div class="card"><h2>Tagescheck <small>1 = schlecht · 10 = stark</small></h2><span class="prompt">Wie war mein Tag?</span>'+
       RATINGS.map(function(r){var v=d.ratings[r[0]];return '<div class="slider"><label for="r_'+r[0]+'">'+r[1]+'</label><input type="range" id="r_'+r[0]+'" min="1" max="10" step="1" value="'+(typeof v==='number'?v:5)+'" data-i="rating" data-k="'+r[0]+'"><output id="o_'+r[0]+'">'+(typeof v==='number'?v:'–')+'</output></div>';}).join('')+'</div>'+
-      '<div class="card"><h2>Meine Erfolge heute <small>auch kleine zählen</small></h2>'+
-      [0,1,2].map(function(i){return '<div style="margin-bottom:10px"><input type="text" id="e_'+i+'" data-i="erfolg" data-k="'+i+'" maxlength="160" placeholder="Erfolg '+(i+1)+'" value="'+esc(d.erfolge[i])+'" autocomplete="off"></div>';}).join('')+
-      '<label class="lb" for="t_dankbar">Dafür bin ich dankbar</label><textarea id="t_dankbar" data-i="text" data-k="dankbar">'+esc(d.dankbar||'')+'</textarea></div>'+
+      '<div class="card"><h2>Erfolge <small>auch kleine zählen</small></h2><span class="prompt">Was ist mir heute gut gelungen?</span>'+
+      [0,1,2,3,4].map(function(i){return '<div style="margin-bottom:10px"><input type="text" id="e_'+i+'" data-i="erfolg" data-k="'+i+'" maxlength="160" placeholder="Erfolg '+(i+1)+'" value="'+esc(d.erfolge[i])+'" autocomplete="off"></div>';}).join('')+
+      '</div>'+
+      '<div class="card"><h2>Dankbarkeit</h2><span class="prompt">Wofür bin ich dankbar?</span><textarea id="t_dankbar" data-i="text" data-k="dankbar" aria-label="Dankbarkeit">'+esc(d.dankbar||'')+'</textarea></div>'+
+      '<div class="card"><h2>Erkenntnisse</h2><span class="prompt">Was habe ich heute gelernt?</span><textarea id="t_gelernt" data-i="text" data-k="gelernt" aria-label="Erkenntnisse">'+esc(d.gelernt)+'</textarea></div>'+
       '<div class="card"><h2>Rückblick</h2>'+
       '<label class="lb" for="t_gut" style="margin-top:0">Was lief gut?</label><textarea id="t_gut" data-i="text" data-k="gut">'+esc(d.gut)+'</textarea>'+
-      '<label class="lb" for="t_schlecht">Was lief weniger gut?</label><textarea id="t_schlecht" data-i="text" data-k="schlecht">'+esc(d.schlecht)+'</textarea>'+
-      '<label class="lb" for="t_gelernt">Was nimmst du mit? <small>(ein Satz reicht)</small></label><textarea id="t_gelernt" data-i="text" data-k="gelernt">'+esc(d.gelernt)+'</textarea></div>'+
+      '<label class="lb" for="t_schlecht">Optimierung <small>– woran möchte ich arbeiten? Was lief weniger gut?</small></label><textarea id="t_schlecht" data-i="text" data-k="schlecht">'+esc(d.schlecht)+'</textarea></div>'+
+      '<div class="card"><h2>Ideen</h2><span class="prompt">Was möchte ich festhalten?</span><textarea id="t_ideen" data-i="text" data-k="ideen" aria-label="Ideen">'+esc(d.ideen||'')+'</textarea></div>'+
       '<div class="row"><button class="btn ghost" data-a="step" data-n="1">Zurück</button><button class="btn" data-a="step" data-n="3">Weiter zu morgen</button></div>';
   }else{
     var m=addDays(t,1);
@@ -525,7 +554,7 @@ function viewDaten(){
     '<div class="card"><h2>Gewohnheiten</h2><div class="pill" style="margin-bottom:14px">'+state.habits.map(function(x){return '<button type="button" data-a="hdel" data-id="'+esc(x.id)+'" title="Entfernen">'+esc(x.name)+' ✕</button>';}).join('')+'</div><form class="add" data-f="habit"><input type="text" name="habit" placeholder="Neue Gewohnheit …" maxlength="40" autocomplete="off"><button class="btn" type="submit">Ergänzen</button></form></div>'+
     '<div class="card"><h2>Lebensbereiche</h2><div class="pill" style="margin-bottom:14px">'+state.areas.map(function(a){return '<button type="button" style="cursor:default">'+esc(a)+'</button>';}).join('')+'</div>'+
     '<form class="add" data-f="area"><input type="text" name="area" placeholder="Neuer Bereich …" maxlength="40" autocomplete="off"><button class="btn" type="submit">Ergänzen</button></form></div>'+
-    '<img class="logo-full" alt="MB Capital Strategies" src="'+LOGO_URI+'"><div class="hint" style="text-align:center;letter-spacing:.14em;font-size:.7rem;text-transform:uppercase">Lebenskompass · Version 4.1</div>';
+    '<img class="logo-full" alt="MB Capital Strategies" src="'+LOGO_URI+'"><div class="hint" style="text-align:center;letter-spacing:.14em;font-size:.7rem;text-transform:uppercase">Lebenskompass · Version 5</div>';
 }
 
 /* ====== Planung: Woche / Monat / Quartal / Jahr ====== */
@@ -629,8 +658,9 @@ function visionCard(edit){
     return '<div class="card"><h2>Mein Kompass</h2>'+(v.vision?'<div style="font-weight:300;font-size:1.08rem;line-height:1.5">'+esc(v.vision)+'</div>':'')+(v.werte?'<div class="pill" style="margin-top:12px">'+v.werte.split(',').map(function(w){w=w.trim();return w?'<button type="button" style="cursor:default">'+esc(w)+'</button>':'';}).join('')+'</div>':'')+'</div>';
   }
   return '<div class="card"><h2>Mein Kompass <small>Vision · Warum · Werte</small></h2>'+
-    '<label class="lb" for="v_vision" style="margin-top:0">Meine Vision <small>(Wo will ich hin? z. B. 2028)</small></label><textarea id="v_vision" data-i="vision" data-k="vision">'+esc(v.vision||'')+'</textarea>'+
+    '<label class="lb" for="v_vision" style="margin-top:0">Lebensvision <small>– was möchte ich eines Tages erreichen?</small></label><textarea id="v_vision" data-i="vision" data-k="vision">'+esc(v.vision||'')+'</textarea>'+
     '<label class="lb" for="v_warum">Mein Warum <small>(Wofür mache ich das?)</small></label><textarea id="v_warum" data-i="vision" data-k="warum">'+esc(v.warum||'')+'</textarea>'+
+    '<label class="lb" for="v_bereich">Lebensbereich im Fokus <small>– welcher Bereich ist mir gerade am wichtigsten?</small></label><input type="text" id="v_bereich" data-i="vision" data-k="bereich" maxlength="120" value="'+esc(v.bereich||'')+'" autocomplete="off">'+
     '<label class="lb" for="v_werte">Meine Werte <small>(mit Komma getrennt)</small></label><input type="text" id="v_werte" data-i="vision" data-k="werte" maxlength="200" value="'+esc(v.werte||'')+'" placeholder="z. B. Freiheit, Familie, Gesundheit" autocomplete="off"></div>';
 }
 function listCard(title,days,field){
@@ -686,18 +716,19 @@ function viewReview(){
   return h;
 }
 /* ====== Buch: jeder Tag eine Seite ====== */
-function bookDays(){return Object.keys(state.days).filter(function(k){var d=state.days[k];return d&&((d.tasks&&d.tasks.length)||d.intention||d.gut||d.schlecht||d.gelernt||d.dankbar||(d.erfolge&&d.erfolge.join('').trim())||(d.habits&&Object.keys(d.habits).length)||(d.ratings&&Object.keys(d.ratings).length));}).sort();}
+function bookDays(){return Object.keys(state.days).filter(function(k){var d=state.days[k];return d&&((d.tasks&&d.tasks.length)||d.intention||d.ideen||(d.plan&&Object.keys(d.plan).length)||d.gut||d.schlecht||d.gelernt||d.dankbar||(d.erfolge&&d.erfolge.join('').trim())||(d.habits&&Object.keys(d.habits).length)||(d.ratings&&Object.keys(d.ratings).length));}).sort();}
 function viewBuch(){
   var all=bookDays(),t=today();if(all.indexOf(t)<0)all.push(t);all.sort();
   var dt=ui.bday&&all.indexOf(ui.bday)>=0?ui.bday:t,i=all.indexOf(dt),d=state.days[dt]||{},h='';
   h+='<div class="bnav"><button data-a="bpage" data-v="'+(all[i-1]||'')+'"'+(i>0?'':' disabled')+'>‹ Vorherige Seite</button><input type="date" data-i="bdate" value="'+dt+'" aria-label="Tag wählen" style="max-width:180px;text-align:center"><button data-a="bpage" data-v="'+(all[i+1]||'')+'"'+(i<all.length-1?'':' disabled')+'>Nächste Seite ›</button></div>';
   h+='<div class="page" id="bookpage"><div class="hint" style="letter-spacing:.18em;text-transform:uppercase;font-size:.7rem">Mein Lebenskompass</div><h1>'+esc(niceDate(dt))+' '+parse(dt).getFullYear()+'</h1>';
   if(d.intention)h+='<h3>Mein Fokus</h3><div class="line">'+esc(d.intention)+'</div>';
-  var ts=d.tasks||[];if(ts.length)h+='<h3>Aufgaben · '+ts.filter(function(x){return x.done;}).length+'/'+ts.length+'</h3>'+ts.map(function(x){return '<div class="line">'+(x.done?'<span class="good">✓</span> ':'○ ')+(x.star?'★ ':'')+esc(x.text)+' <small class="muted">· '+esc(x.area||'')+'</small></div>';}).join('');
+  var pl=d.plan||{},pk=Object.keys(pl).filter(function(k){return pl[k];}).sort();if(pk.length)h+='<h3>Zeitplan</h3>'+pk.map(function(k){return '<div class="line"><span class="mono muted">'+k+':00</span>  '+esc(pl[k])+'</div>';}).join('');
+  var ts=d.tasks||[];if(ts.length)h+='<h3>Tagesziele · '+ts.filter(function(x){return x.done;}).length+'/'+ts.length+'</h3>'+ts.map(function(x){return '<div class="line">'+(x.done?'<span class="good">✓</span> ':'○ ')+(x.star?'★ ':'')+esc(x.text)+' <small class="muted">· '+esc(x.area||'')+'</small></div>';}).join('');
   var hb=state.habits.filter(function(x){return d.habits&&d.habits[x.id];});if(hb.length)h+='<h3>Gewohnheiten</h3><div class="pill">'+hb.map(function(x){return '<button type="button" class="on" style="cursor:default">✓ '+esc(x.name)+'</button>';}).join('')+'</div>';
   var rt=RATINGS.filter(function(r){return d.ratings&&typeof d.ratings[r[0]]==='number';});if(rt.length)h+='<h3>So war der Tag</h3>'+rt.map(function(r){var v=d.ratings[r[0]];return '<div class="abar"><span>'+r[1]+'</span><div class="tr"><i style="width:'+(v*10)+'%;background:'+colFor(v/10)+'"></i></div><span class="mono">'+v+'/10</span></div>';}).join('');
   var er=(d.erfolge||[]).filter(function(e){return e&&e.trim();});if(er.length)h+='<h3>Meine Erfolge</h3>'+er.map(function(e,k){return '<div class="line"><span class="mono" style="color:var(--gold-hi)">'+(k+1)+'.</span> '+esc(e)+'</div>';}).join('');
-  [['dankbar','Dankbar für'],['gut','Was gut lief'],['schlecht','Was weniger gut lief'],['gelernt','Was ich mitnehme']].forEach(function(f){if(d[f[0]])h+='<h3>'+f[1]+'</h3><div class="line">'+esc(d[f[0]])+'</div>';});
+  [['dankbar','Dankbarkeit'],['gelernt','Erkenntnisse'],['gut','Was gut lief'],['schlecht','Optimierung'],['ideen','Ideen']].forEach(function(f){if(d[f[0]])h+='<h3>'+f[1]+'</h3><div class="line">'+esc(d[f[0]])+'</div>';});
   if(dt===t&&!d.reviewed)h+='<div class="hint" style="margin-top:20px">Diese Seite schreibst du heute Abend fertig – im Tab „Abend“.</div>';
   else if(!d.intention&&!ts.length&&!er.length&&!d.gut)h+='<div class="hint" style="margin-top:20px">Für diesen Tag gibt es noch keine Einträge.</div>';
   h+='<div class="pg">Seite '+(i+1)+' / '+all.length+'</div></div>';
@@ -716,12 +747,22 @@ function viewPlan(){
     '<div class="kpi"><b>'+rev+'/'+days.length+'</b><span>Abende ausgefüllt</span></div></div>';
   if(hz==='y')h+='<div class="row" style="margin-bottom:18px"><button class="btn" data-a="review" data-y="'+P.key+'">Jahresrückblick '+esc(P.key)+' öffnen</button></div>'+visionCard(true);
   if(hz==='m'){var cd=challengeDots(P.key);h+='<div class="card"><h2>Monats-Challenge <small>30 Tage eine Sache durchziehen'+(note.challenge?' · '+cd.done+'/'+cd.n:'')+'</small></h2><div class="focusline"><input type="text" data-i="note" data-k="challenge" maxlength="120" value="'+esc(note.challenge||'')+'" placeholder="z. B. jeden Tag 10.000 Schritte" autocomplete="off"></div>'+(note.challenge?cd.html:'')+'</div>';}
-  if(hz==='w')h+='<div class="card"><h2>Frage der Woche</h2><div style="font-weight:300;font-size:1.1rem;margin-bottom:12px">'+esc(weekQuestion(P.s))+'</div><textarea data-i="note" data-k="frage" aria-label="Antwort" placeholder="Deine Antwort …">'+esc(note.frage||'')+'</textarea></div>';
+  var wTop='',wBot='';
+  if(hz==='w'){
+    var tip=tipOf(P.s),rad=note.rad||{},pn=noteOf('w',prev.key),prad=pn.rad&&Object.keys(pn.rad).length?pn.rad:null;
+    wTop+='<div class="card"><h2>Impuls der Woche</h2><div style="font-weight:400;color:var(--gold-hi);margin-bottom:4px">'+esc(tip[0])+'</div><div class="hint">'+esc(tip[1])+'</div></div>';
+    wTop+='<div class="card"><h2>Wochen-Challenge</h2><span class="prompt">Eine Sache, die ich diese Woche bewusst anders mache</span><div class="focusline"><input type="text" data-i="note" data-k="chal" maxlength="120" value="'+esc(note.chal||'')+'" placeholder="z. B. kein Social Media vor 12 Uhr" autocomplete="off"></div></div>';
+    wBot+='<div class="card"><h2>Lebensrad</h2><span class="prompt">Wie balanciert war meine Woche? (1–10 je Bereich)</span>'+wheelRadar(rad,prad)+
+      state.areas.map(function(a,k){var v=rad[a];return '<div class="slider"><label for="lr_'+k+'">'+esc(a)+'</label><input type="range" id="lr_'+k+'" min="1" max="10" step="1" value="'+(typeof v==='number'?v:5)+'" data-i="rad" data-k="'+esc(a)+'"><output>'+(typeof v==='number'?v:'–')+'</output></div>';}).join('')+'</div>';
+    wBot+='<div class="card"><h2>Stolz</h2><span class="prompt">Worauf bin ich diese Woche besonders stolz?</span><textarea data-i="note" data-k="stolz" aria-label="Stolz">'+esc(note.stolz||'')+'</textarea></div>';
+  }
+  if(hz==='w')wBot+='<div class="card"><h2>Frage der Woche</h2><div style="font-weight:300;font-size:1.1rem;margin-bottom:12px">'+esc(weekQuestion(P.s))+'</div><textarea data-i="note" data-k="frage" aria-label="Antwort" placeholder="Deine Antwort …">'+esc(note.frage||'')+'</textarea></div>';
   h+='<div class="card"><h2>Mein Fokus '+HZN[hz]+'</h2><div class="focusline"><input type="text" data-i="note" data-k="fokus" maxlength="140" value="'+esc(note.fokus||'')+'" placeholder="Was zählt in diesem Zeitraum am meisten?" autocomplete="off"></div></div>';
   h+='<div class="card"><h2>Ziele '+HZN[hz]+'</h2>'+(gl.length?gl.map(function(g){return goalRow(g,P);}).join(''):'<div class="hint">Noch keine Ziele. Wähle wenige, klare Ziele – drei sind ideal.</div>')+
     '<form class="add" data-f="goal" data-hz="'+hz+'" data-key="'+esc(P.key)+'" style="margin-top:14px"><input type="text" name="text" placeholder="Neues Ziel …" maxlength="160" autocomplete="off"><select name="area" aria-label="Bereich">'+areaOptions('')+'</select>'+
     (PARENT[hz]?(function(){var pl=goalsOf(PARENT[hz],parentKey(hz,P));return pl.length?'<select name="parent" aria-label="Zahlt ein auf"><option value="">zahlt ein auf … ('+HZS[PARENT[hz]]+'sziel)</option>'+pl.map(function(g){return '<option value="'+esc(g.id)+'">'+esc(g.text)+'</option>';}).join('')+'</select>':'';})():'')+
     '<button class="btn" type="submit">Ergänzen</button></form></div>';
+  if(hz==='w')h+=wTop;
   h+='<div class="card"><h2>Verlauf <small>'+esc(P.label)+'</small></h2>'+periodChart(P)+'</div>';
   if(hz==='q'||hz==='y'||hz==='m'){h+='<div class="card"><h2>Tage im Überblick</h2><div class="pill" style="margin-bottom:14px"><button data-a="hm" data-v="score" class="'+(ui.hm==='score'?'on':'')+'">Gesamtgefühl</button><button data-a="hm" data-v="quote" class="'+(ui.hm==='quote'?'on':'')+'">Erledigt-Quote</button></div>'+periodHeat(P)+
     '<div class="legend"><span><i style="background:'+colFor(0)+'"></i>schwach</span><span><i style="background:'+colFor(.5)+'"></i>mittel</span><span><i style="background:'+colFor(1)+'"></i>stark</span><span><i style="background:#17172b"></i>keine Daten</span></div></div>';}
@@ -729,6 +770,7 @@ function viewPlan(){
   if(state.habits.length){h+='<div class="card"><h2>Gewohnheiten <small>Tage erfüllt</small></h2>'+(days.length?state.habits.map(function(x){var n=days.filter(function(dt){return habitDone(dt,x.id);}).length,q=n/days.length;return '<div class="abar"><span>'+esc(x.name)+'</span><div class="tr"><i style="width:'+Math.round(q*100)+'%"></i></div><span class="mono">'+n+'/'+days.length+'</span></div>';}).join(''):'<div class="hint">Noch keine Tage in diesem Zeitraum.</div>')+'</div>';}
   var er=[];days.slice().reverse().forEach(function(dt){var d=state.days[dt];if(d&&d.erfolge)d.erfolge.forEach(function(e){if(e&&e.trim())er.push({dt:dt,e:e});});});
   h+='<div class="card"><h2>Erfolge <small>'+er.length+' in diesem Zeitraum</small></h2>'+(er.length?er.slice(0,hz==='w'?10:12).map(function(x){return '<div class="entry"><small>'+esc(shortDate(x.dt))+'</small>'+esc(x.e)+'</div>';}).join(''):'<div class="hint">Noch keine Erfolge notiert – sie erscheinen aus deinem Abend-Ritual.</div>')+'</div>';
+  if(hz==='w')h+=wBot;
   h+=listCard('Dankbar für',days,'dankbar');
   h+=listCard('Mitgenommen',days,'gelernt');
   h+='<div class="card"><h2>Rückblick '+HZN[hz]+'</h2><label class="lb" for="n_gut" style="margin-top:0">Was lief gut?</label><textarea id="n_gut" data-i="note" data-k="gut">'+esc(note.gut||'')+'</textarea>'+
@@ -917,6 +959,7 @@ var actions={
   night:function(d){try{localStorage.setItem(NIGHT_KEY,d.v);}catch(e){}applyNight();render();},
   book:function(){ui.bday=today();ui.tab='buch';render();window.scrollTo(0,0);},
   bpage:function(d){if(d.v){ui.bday=d.v;render();}},
+  tpopen:function(d){ui.tpOpen=d.dt;render();},
   chal:function(){var d=ensureDay(today());if(d.chal)delete d.chal;else d.chal=1;save();render();},
   hsel:function(d){ui.hsel=d.id;render();},
   review:function(d){ui.ry=+d.y;ui.tab='review';render();window.scrollTo(0,0);},
@@ -981,6 +1024,8 @@ document.addEventListener('input',function(e){
   if(el.dataset.i==='bdate'){if(/^\d{4}-\d{2}-\d{2}$/.test(el.value)){ui.bday=el.value;if(!state.days[el.value]){}render();}return;}
   if(el.dataset.i==='name'){state.name=el.value.slice(0,30);save();return;}
   if(el.dataset.i==='gpct'){var gg=goalsOf(el.dataset.hz,el.dataset.key).filter(function(g){return g.id===el.dataset.id;})[0];if(gg){gg.pct=+el.value;var bb=document.getElementById('gb_'+gg.id),oo=document.getElementById('go_'+gg.id);if(bb){bb.style.width=gg.pct+'%';bb.style.background=colFor(gg.pct/100);}if(oo)oo.textContent=gg.pct+'%';save();}return;}
+  if(el.dataset.i==='plan'){var pd=ensureDay(el.dataset.dt);if(!pd.plan)pd.plan={};if(el.value)pd.plan[k]=el.value.slice(0,80);else delete pd.plan[k];save();return;}
+  if(el.dataset.i==='rad'){var rk='w:'+period('w',ui.off).key;if(!state.notes[rk])state.notes[rk]={};if(!state.notes[rk].rad)state.notes[rk].rad={};state.notes[rk].rad[k]=+el.value;var ou=el.nextElementSibling;if(ou)ou.textContent=el.value;save();return;}
   if(el.dataset.i==='vision'){state.vision[k]=el.value.slice(0,1000);save();return;}
   if(el.dataset.i==='note'){var nk=ui.hz+':'+period(ui.hz,ui.off).key;if(!state.notes[nk])state.notes[nk]={};state.notes[nk][k]=el.value.slice(0,2000);save();return;}
   var d=ensureDay(today());
@@ -990,6 +1035,7 @@ document.addEventListener('input',function(e){
   save();
 });
 /* Ein Regler zählt erst als bewertet, wenn er berührt wurde. */
+document.addEventListener('change',function(e){var el=e.target;if(el.dataset&&el.dataset.i==='rad'){var y=window.scrollY;render();window.scrollTo(0,y);}});
 document.addEventListener('pointerdown',function(e){
   var el=e.target;if(el.dataset&&el.dataset.i==='rating'){var d=ensureDay(today());if(typeof d.ratings[el.dataset.k]!=='number'){d.ratings[el.dataset.k]=+el.value;var o=document.getElementById('o_'+el.dataset.k);if(o)o.textContent=el.value;save();}}
 });
