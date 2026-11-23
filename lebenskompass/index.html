@@ -778,8 +778,9 @@ function viewPlan(){
   return h;
 }
 /* ====== Geräte-Sync (Supabase) ====== */
-var SB_URL='https://ckscoezravjwtcrjxckr.supabase.co';
-var SB_KEY='sb_publishable_8eadKa2_HTc-CFGb7mRcUw_7DGLYB6D';
+var SB_URL='https://kkfeiopnzzcjmamnnceh.supabase.co';
+var SB_KEY='sb_publishable_c6bC44nST_Nmc8qyrlkirQ_p9C53kuK';
+var APP_URL='https://mpb190799.github.io/fittracker/lebenskompass/';
 var AUTH_KEY='lebenskompass.auth';
 var sync={busy:false,again:false,msg:'',ok:0,timer:null,deferRender:false};
 var authUI={stage:'email',email:'',err:'',busy:false};
@@ -890,14 +891,16 @@ function takeHash(){
 }
 function sendCode(email){
   authUI.busy=true;authUI.err='';render();
-  sbFetch('POST','/auth/v1/otp',{email:email,create_user:true}).then(function(){authUI.stage='code';authUI.email=email;authUI.busy=false;render();},
+  sbFetch('POST','/auth/v1/otp?redirect_to='+encodeURIComponent(APP_URL),{email:email,create_user:true}).then(function(){authUI.stage='code';authUI.email=email;authUI.busy=false;render();},
     function(e){authUI.busy=false;authUI.err='Senden fehlgeschlagen: '+e.message;render();});
 }
 function verifyCode(code){
   authUI.busy=true;authUI.err='';render();
-  sbFetch('POST','/auth/v1/verify',{type:'email',email:authUI.email,token:code}).then(function(j){
+  var body={type:'email',email:authUI.email,token:code},m=code.match(/[?&]token=([^&#\s]+)/);
+  if(m){var ty=(code.match(/[?&]type=([a-z_]+)/)||[])[1]||'magiclink';body={type:ty,token_hash:decodeURIComponent(m[1])};}
+  sbFetch('POST','/auth/v1/verify',body).then(function(j){
     setSess(sessFrom(j));authUI.stage='email';authUI.busy=false;sync.msg='';render();toast('Angemeldet – Geräte werden abgeglichen');syncNow();
-  },function(e){authUI.busy=false;authUI.err='Code ungültig oder abgelaufen.';render();});
+  },function(e){authUI.busy=false;authUI.err='Link oder Code ungültig bzw. abgelaufen – bitte neu anfordern.';render();});
 }
 function syncCard(){
   var s=getSess(),h='<div class="card syncbox"><h2>Geräte-Sync</h2>';
@@ -906,12 +909,12 @@ function syncCard(){
       '<div class="st '+(sync.msg?'':'ok')+'">'+(sync.msg?esc(sync.msg):(sync.ok?'Zuletzt synchronisiert um '+pad(new Date(sync.ok).getHours())+':'+pad(new Date(sync.ok).getMinutes())+' Uhr':'Noch nicht synchronisiert'))+'</div>'+
       '<div class="row" style="margin-top:12px"><button class="btn" data-a="syncnow">Jetzt abgleichen</button><button class="btn ghost" data-a="logout">Abmelden</button></div>';
   }else if(authUI.stage==='code'){
-    h+='<div class="hint">Wir haben einen Code an <b>'+esc(authUI.email)+'</b> geschickt. Gib ihn hier ein (oder tippe auf den Link in der E-Mail).</div>'+
-      '<form class="add" data-f="code" style="margin-top:12px"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code aus der E-Mail" maxlength="10"><button class="btn" type="submit"'+(authUI.busy?' disabled':'')+'>Bestätigen</button></form>'+
+    h+='<div class="hint">Eine Anmelde-Mail ist an <b>'+esc(authUI.email)+'</b> unterwegs (Absender Supabase, ggf. im Spam).<br><b>Im Browser:</b> einfach auf den Link in der Mail tippen.<br><b>In der App vom Home-Bildschirm:</b> den Link in der Mail lange drücken → „Link kopieren“ → hier einfügen.</div>'+
+      '<form class="add" data-f="code" style="margin-top:12px"><input type="text" name="code" autocomplete="off" placeholder="Link aus der Mail einfügen"><button class="btn" type="submit"'+(authUI.busy?' disabled':'')+'>Anmelden</button></form>'+
       '<div class="hint"><a href="#" data-a="authback" style="color:var(--gold-hi)">Andere E-Mail verwenden</a></div>';
   }else{
-    h+='<div class="hint">Melde dich einmalig mit deiner E-Mail an – dann sind iPad, Handy und PC synchron. Kein Passwort nötig.</div>'+
-      '<form class="add" data-f="login" style="margin-top:12px"><input type="text" name="email" inputmode="email" autocomplete="email" placeholder="E-Mail-Adresse" value="'+esc(authUI.email)+'"><button class="btn" type="submit"'+(authUI.busy?' disabled':'')+'>Code senden</button></form>';
+    h+='<div class="hint">Melde dich einmalig per E-Mail-Link an – dann sind iPad, Handy und PC synchron. Kein Passwort nötig.</div>'+
+      '<form class="add" data-f="login" style="margin-top:12px"><input type="text" name="email" inputmode="email" autocomplete="email" placeholder="E-Mail-Adresse" value="'+esc(authUI.email||'marco.bozem@live.de')+'"><button class="btn" type="submit"'+(authUI.busy?' disabled':'')+'>Anmelde-Link senden</button></form>';
   }
   if(authUI.err)h+='<div class="hint bad">'+esc(authUI.err)+'</div>';
   return h+'</div>';
@@ -1008,7 +1011,7 @@ document.addEventListener('submit',function(e){
     var em=f.elements.email.value.trim();if(em.indexOf('@')<1){authUI.err='Bitte eine gültige E-Mail eingeben.';render();return;}
     sendCode(em);
   }else if(f.dataset.f==='code'){
-    var cd=f.elements.code.value.replace(/\s/g,'');if(cd.length<4)return;verifyCode(cd);
+    var cd=f.elements.code.value.trim();if(cd.length<4)return;verifyCode(cd.indexOf('token=')>=0?cd:cd.replace(/\s/g,''));
   }else if(f.dataset.f==='habit'){
     var hn=f.elements.habit.value.trim().slice(0,40);if(!hn)return;
     state.habits.push({id:uid(),name:hn});save();render();
