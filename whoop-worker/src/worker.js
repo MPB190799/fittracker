@@ -280,7 +280,13 @@ async function cfRaw(env, mime, b64, hint) {
   const errs = [];
   const models = [...new Set([env.CF_VISION_MODEL, ...CF_VISION_MODELS].filter(Boolean))];
   for (const model of models) {
-    for (const extra of [{ reasoning_effort: "low", response_format: { type: "json_object" } }, {}]) {
+    // 1. Denken aus (spart Neurons ≈ Faktor 3, schneller) → 2. wenig Denken → 3. Minimal-Request.
+    // Laut Schema von qwen3.8: chat_template_kwargs.enable_thinking, reasoning_effort low|medium|xhigh.
+    for (const extra of [
+      { chat_template_kwargs: { enable_thinking: false }, response_format: { type: "json_object" } },
+      { reasoning_effort: "low", response_format: { type: "json_object" } },
+      {}
+    ]) {
       try {
         const res = await env.AI.run(model, {
           messages: [{ role: "user", content: [
