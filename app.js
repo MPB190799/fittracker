@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v19 · 2026-11-23";
+const APP_VERSION = "v20 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -106,6 +106,26 @@ const LOCAL_FOODS = [
   { name: "Orangensaft", per100: { kcal: 45, protein: 0.7, carbs: 10, fat: 0.2 } },
   { name: "Proteinriegel", per100: { kcal: 350, protein: 33, carbs: 30, fat: 9 } }
 ];
+// Ballaststoffe / Zucker je 100 g (Näherungswerte gängiger Nährwerttabellen) — [Ballaststoffe, Zucker]
+const LOCAL_FS = {
+  "Magerquark": [0, 4], "Skyr natur": [0, 4], "Haferflocken": [10, 1], "Banane": [2, 12], "Apfel": [2.4, 10], "Ei (Hühnerei)": [0, 1.1],
+  "Hähnchenbrust": [0, 0], "Rinderhack (mager)": [0, 0], "Lachs": [0, 0], "Thunfisch (Dose, Wasser)": [0, 0], "Reis (gekocht)": [0.4, 0.1],
+  "Kartoffeln (gekocht)": [1.8, 0.8], "Vollkornbrot": [7, 3], "Nudeln (gekocht)": [1.8, 0.6], "Milch 1,5%": [0, 4.9], "Gouda / Käse": [0, 0],
+  "Olivenöl": [0, 0], "Mandeln": [12.5, 4.4], "Whey Protein (Pulver)": [0, 6], "Käsekuchen": [0.5, 20], "Reiswaffel": [4, 1], "Avocado": [6.7, 0.7],
+  "Kreatin Monohydrat (Pulver)": [0, 0], "Vollkornnudeln (gekocht)": [4, 0.8], "Quinoa (gekocht)": [2.8, 0.9], "Linsen (gekocht)": [7.9, 1.8],
+  "Kichererbsen (gekocht)": [7.6, 4.8], "Bohnen (Dose)": [5, 1], "Brokkoli": [2.6, 1.7], "Tomate": [1.2, 2.6], "Gurke": [0.5, 1.7], "Paprika": [2, 4],
+  "Karotte": [2.8, 4.7], "Zwiebel": [1.7, 4.2], "Spinat": [2.2, 0.4], "Blattsalat": [1.3, 0.8], "Pute (Brust)": [0, 0], "Schweineschnitzel (natur)": [0, 0],
+  "Hackfleisch gemischt": [0, 0], "Bratwurst": [0, 0.5], "Schinken (gekocht)": [0, 1], "Salami": [0, 1], "Forelle": [0, 0], "Garnelen": [0, 0],
+  "Hüttenkäse (körnig)": [0, 2.7], "Joghurt (natur 3,5%)": [0, 4.7], "Griechischer Joghurt 10%": [0, 4], "Butter": [0, 0.7], "Frischkäse": [0, 3],
+  "Mozzarella": [0, 1], "Brötchen (Weizen)": [3, 2], "Toastbrot": [3, 5], "Brezel": [2.5, 1], "Pizza Margherita": [2, 3.5], "Pommes frites": [3.8, 0.3],
+  "Döner (mit allem)": [1.5, 2], "Müsli (gemischt)": [7, 18], "Cornflakes": [3, 9], "Honig": [0, 82], "Nutella": [3.4, 56], "Erdnussbutter": [6, 9],
+  "Walnüsse": [6.7, 2.6], "Cashewkerne": [3.3, 6], "Dunkle Schokolade (85%)": [11, 14], "Orange": [2.4, 9], "Heidelbeeren": [2.4, 10],
+  "Erdbeeren": [2, 4.9], "Weintrauben": [0.9, 16], "Bier (Pils)": [0, 0.3], "Rotwein": [0, 0.6], "Cola": [0, 10.6], "Orangensaft": [0.2, 8.4],
+  "Proteinriegel": [8, 5]
+};
+for (const f of LOCAL_FOODS) { const fs = LOCAL_FS[f.name]; if (fs) { f.per100.fiber = fs[0]; f.per100.sugar = fs[1]; } }
+const FIBER_TARGET = 30; // g/Tag, DGE-Richtwert (mindestens)
+
 // Haushalts-Portionen für die Schnell-Mengen-Chips (g pro Einheit)
 const PORTIONS = [
   { t: "Scheibe Brot", g: 45 }, { t: "Ei", g: 60 }, { t: "Handvoll", g: 30 },
@@ -115,7 +135,7 @@ const PORTIONS = [
 const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0,
     heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null, goalMode: "rec",
-    whoopBonus: true, lastCheckin: null,
+    whoopBonus: true, lastCheckin: null, proteinBasis: "current",
     neckCm: null, hipCm: null, bfManual: null, goalBf: null },
   phase: null, // { type: "soup"|"buchinger"|"if16", start, days, kcal, winStart, winEnd }
   entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
@@ -128,7 +148,8 @@ const DEFAULT = {
 const JFLAGS = [
   { k: "alkohol", t: "🍺 Alkohol" }, { k: "spaet", t: "🌙 spät gegessen" },
   { k: "koffein", t: "☕ Koffein spät" }, { k: "stress", t: "😰 Stress" },
-  { k: "sport", t: "🏸 Sport/Cardio" }, { k: "kraft", t: "🏋️ Krafttraining" }, { k: "gut", t: "😴 gut geschlafen" }
+  { k: "sport", t: "🏸 Sport/Cardio" }, { k: "kraft", t: "🏋️ Krafttraining" }, { k: "lesen", t: "📖 Gelesen" },
+  { k: "frueh", t: "🛏️ Früh ins Bett" }, { k: "handy", t: "📱 Handy spät im Bett" }, { k: "gut", t: "😴 gut geschlafen" }
 ];
 const LS_KEY = "fittracker:db";
 
@@ -185,11 +206,19 @@ async function idbDel(id) { const db = await idb(); return new Promise((res, rej
 function latestWeight() { return state.weights.length ? state.weights[state.weights.length - 1].kg : null; }
 // Eiweiß pro kg: bei deutlichem Übergewicht auf das ZIELgewicht beziehen (gängige Praxis) —
 // 2 g × 110 kg = 220 g wäre unnötig hoch. Ohne Zielgewicht wie bisher aufs aktuelle Gewicht.
-function proteinBaseKg() { const w = latestWeight(), g = goalW() || 0; return w && g && g < w ? g : w; }
+// Worauf die g/kg Eiweiß gerechnet werden: aktuelles Gewicht (Standard, Marcos Wunsch), Zielgewicht oder fettfreie Masse
+function proteinBaseKg() {
+  const w = latestWeight(); if (!w) return null;
+  const b = state.profile.proteinBasis || "current";
+  if (b === "goal") { const g = goalW(); return g && g < w ? g : w; }
+  if (b === "lean") { const c = bodyComp(); return c ? c.leanKg : w; }
+  return w;
+}
 function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 function dayEntries() { return state.entries.filter(e => e.date === selDate); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function round1(n) { return Math.round(n * 10) / 10; }
+function optNum(v) { if (v === "" || v == null) return null; const n = Number(String(v).replace(",", ".")); return isFinite(n) && n >= 0 ? round1(n) : null; }
 function showErr(msg) { const b = $("#errbar"); if (b) { b.textContent = "⚠ " + msg; b.style.display = "block"; } }
 
 // ---------- render diary ----------
@@ -214,7 +243,8 @@ function countUp(id, to) {
 }
 function renderSummary() {
   const es = dayEntries();
-  const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat }), { kcal: 0, p: 0, c: 0, f: 0 });
+  const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat,
+    fi: a.fi + (e.fiber || 0), su: a.su + (e.sugar || 0), unk: a.unk + (e.fiber == null ? 1 : 0) }), { kcal: 0, p: 0, c: 0, f: 0, fi: 0, su: 0, unk: 0 });
   const pinfo = phaseDayInfo(selDate);
   const pT = pinfo && pinfo.fasting ? null : proteinTarget(); // an Fastentagen kein Eiweiß-Ziel
   const bonus = pinfo && pinfo.kcal ? 0 : whoopBonus(selDate);
@@ -239,6 +269,13 @@ function renderSummary() {
   const bar = (id, val, tgt) => { const el = $("#" + id); if (el) el.style.width = (tgt ? Math.min(100, (val / tgt) * 100) : 0) + "%"; };
   bar("cBar", sum.c, state.profile.carbTarget);
   bar("fBar", sum.f, state.profile.fatTarget);
+  // Ballaststoffe (DGE ≥ 30 g) und Zucker (WHO: freie Zucker < 10 % der kcal — hier Gesamtzucker als Orientierung)
+  const sugarMax = Math.round(kT * 0.10 / 4);
+  set("fiVal", Math.round(sum.fi)); set("fiTgt", "/ " + FIBER_TARGET + (sum.unk ? " · " + sum.unk + "× ohne Angabe" : ""));
+  set("suVal", Math.round(sum.su)); set("suTgt", "/ max " + sugarMax);
+  bar("fiBar", sum.fi, FIBER_TARGET); bar("suBar", sum.su, sugarMax);
+  const fb = $("#fiBar"); if (fb) fb.classList.toggle("done", sum.fi >= FIBER_TARGET);
+  const sb = $("#suBar"); if (sb) sb.classList.toggle("over", sum.su > sugarMax);
 }
 function renderMeals() {
   const es = dayEntries();
@@ -284,11 +321,11 @@ function copyYesterday() {
   const items = state.entries.filter(e => e.date === prev);
   if (!items.length) return alert("Für gestern gibt es keine Einträge zum Übernehmen.");
   if (!confirm(`${items.length} Einträge von gestern (${prev}) auf heute übernehmen?`)) return;
-  for (const e of items) state.entries.push({ id: uid(), date: selDate, meal: e.meal, name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
+  for (const e of items) state.entries.push({ id: uid(), date: selDate, meal: e.meal, ...tplItem(e) });
   persist(); renderDiary();
 }
 // ---------- Mahlzeiten-Vorlagen („mein Frühstück" mit 1 Tipp) ----------
-const tplItem = (e) => ({ name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
+const tplItem = (e) => ({ name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat, fiber: e.fiber ?? null, sugar: e.sugar ?? null });
 function saveTemplate(meal, items) {
   const name = (prompt("Name der Vorlage:", "Mein " + MEALS[meal]) || "").trim();
   if (!name) return;
@@ -567,7 +604,7 @@ function bodyPlan(modeOverride) {
     const d = new Date(); d.setDate(d.getDate() + Math.round(weeks * 7));
     eta = { weeks: Math.round(weeks), label: MON[d.getMonth()] + " " + d.getFullYear() };
   }
-  const protBase = gw && gw < w ? gw : w;
+  const protBase = proteinBaseKg() || w;
   const protein = Math.round(protBase * (P.proteinPerKg || 2));
   const fat = Math.round(Math.max(0.8 * protBase, kcal * 0.25 / 9));
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
@@ -812,6 +849,8 @@ function openSheet(meal, entry) {
   $("#fProtein").value = entry ? entry.protein : "";
   $("#fCarbs").value = entry ? entry.carbs : "";
   $("#fFat").value = entry ? entry.fat : "";
+  $("#fFiber").value = entry && entry.fiber != null ? entry.fiber : "";
+  $("#fSugar").value = entry && entry.sugar != null ? entry.sugar : "";
   $("#searchInput").value = ""; $("#results").innerHTML = ""; $("#per100hint").textContent = "";
   const vb = $("#visionBox"); if (vb) vb.innerHTML = "";
   const vh = $("#visionHint"); if (vh) vh.value = "";
@@ -837,6 +876,8 @@ function applyPer100() {
   $("#fProtein").value = round1(per100.protein * g / 100);
   $("#fCarbs").value = round1(per100.carbs * g / 100);
   $("#fFat").value = round1(per100.fat * g / 100);
+  $("#fFiber").value = per100.fiber != null ? round1(per100.fiber * g / 100) : "";
+  $("#fSugar").value = per100.sugar != null ? round1(per100.sugar * g / 100) : "";
 }
 // Für Mengen-Chips: mit bekannter Quelle (Suche/Barcode/Foto/Favorit) exakt aus per100 neu
 // rechnen; bei manuell eingetragenen Werten (kein per100) proportional zum Gramm-Verhältnis
@@ -850,6 +891,7 @@ function setGramsScaled(newG) {
     const ratio = newG / oldG;
     const scale = (id, round) => { const el = $("#" + id); el.value = round(( Number(el.value) || 0) * ratio); };
     scale("fKcal", Math.round); scale("fProtein", round1); scale("fCarbs", round1); scale("fFat", round1);
+    for (const id of ["fFiber", "fSugar"]) if ($("#" + id).value !== "") scale(id, round1);
   }
 }
 
@@ -901,7 +943,8 @@ function parseOFF(p) {
   if (!name) return null;
   const kcal = n["energy-kcal_100g"] != null ? n["energy-kcal_100g"] : (n["energy_100g"] ? n["energy_100g"] / 4.184 : null);
   if (kcal == null) return null;
-  return { name: name.slice(0, 100), per100: { kcal: +kcal, protein: +(n.proteins_100g || 0), carbs: +(n.carbohydrates_100g || 0), fat: +(n.fat_100g || 0) } };
+  return { name: name.slice(0, 100), per100: { kcal: +kcal, protein: +(n.proteins_100g || 0), carbs: +(n.carbohydrates_100g || 0), fat: +(n.fat_100g || 0),
+    fiber: n.fiber_100g != null ? +n.fiber_100g : null, sugar: n.sugars_100g != null ? +n.sugars_100g : null } };
 }
 function renderResults(items) {
   const box = $("#results");
@@ -926,7 +969,7 @@ function pickFood(it) {
   $("#results").innerHTML = ""; $("#searchInput").value = "";
 }
 on("#fGrams", "input", applyPer100);
-for (const id of ["fKcal", "fProtein", "fCarbs", "fFat"]) {
+for (const id of ["fKcal", "fProtein", "fCarbs", "fFat", "fFiber", "fSugar"]) {
   on("#" + id, "input", () => { per100 = null; $("#per100hint").textContent = ""; });
 }
 
@@ -937,6 +980,8 @@ function rememberFood(e) {
   const g = e.grams || 0;
   const per100 = g ? { kcal: e.kcal / g * 100, protein: e.protein / g * 100, carbs: e.carbs / g * 100, fat: e.fat / g * 100 }
     : { kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat };
+  if (e.fiber != null) per100.fiber = g ? e.fiber / g * 100 : e.fiber;
+  if (e.sugar != null) per100.sugar = g ? e.sugar / g * 100 : e.sugar;
   const key = foodKey(e.name);
   let f = state.foods.find(x => foodKey(x.name) === key);
   if (f) { f.uses = (f.uses || 0) + 1; f.lastUsed = selDate; f.per100 = per100; f.lastGrams = e.grams; }
@@ -1035,8 +1080,11 @@ on("#saveEntry", "click", () => {
   const e = {
     date: selDate, meal: $("#mealSelect").value, name: $("#fName").value.trim(),
     grams: Math.max(0, Number($("#fGrams").value) || 0), kcal: Math.max(0, Math.round(Number($("#fKcal").value) || 0)),
-    protein: Math.max(0, round1(Number($("#fProtein").value) || 0)), carbs: Math.max(0, round1(Number($("#fCarbs").value) || 0)), fat: Math.max(0, round1(Number($("#fFat").value) || 0))
+    protein: Math.max(0, round1(Number($("#fProtein").value) || 0)), carbs: Math.max(0, round1(Number($("#fCarbs").value) || 0)), fat: Math.max(0, round1(Number($("#fFat").value) || 0)),
+    fiber: optNum($("#fFiber").value), sugar: optNum($("#fSugar").value)
   };
+  // Uhrzeit merken (für „spät gegessen“ in der Schlaf-Auswertung) — nur bei neuen Einträgen für heute
+  if (!$("#editId").value && selDate === today()) { const d = new Date(); e.at = pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
   if (!e.name) return alert("Name fehlt.");
   const id = $("#editId").value;
   if (id) { const ex = state.entries.find(x => x.id === id); if (ex) Object.assign(ex, e); }
@@ -1152,8 +1200,10 @@ function fillGoals() {
   $("#goalFat").value = state.profile.fatTarget;
   const w = latestWeight(), pt = proteinTarget(), base = proteinBaseKg();
   $("#proteinCalc").textContent = !w ? "Trag dein Gewicht ein → Eiweiß-Ziel rechnet sich automatisch."
-    : base !== w ? `= ${pt} g Eiweiß/Tag, gerechnet auf dein Zielgewicht ${base} kg.` : `= ${pt} g Eiweiß/Tag bei ${w} kg (zuletzt eingetragen).`;
+    : `= ${pt} g Eiweiß/Tag, gerechnet auf ${({ current: "dein aktuelles Gewicht", goal: "dein Zielgewicht", lean: "deine fettfreie Masse" })[state.profile.proteinBasis || "current"]} (${fmtKg(base)} kg).`;
+  const pb = $("#goalProtBasis"); if (pb) pb.value = state.profile.proteinBasis || "current";
 }
+on("#goalProtBasis", "change", (e) => { state.profile.proteinBasis = e.target.value; persist(); fillGoals(); renderSummary(); renderPlan(); });
 on("#saveGoals", "click", () => {
   // Leeres/ungültiges Feld darf das Ziel nie stillschweigend auf 0 setzen (kaputt wirkender
   // Ring ohne Erklärung) — dann lieber den bisherigen Wert behalten.
@@ -1378,33 +1428,72 @@ function drawTrend() {
   pts.forEach((p, i) => { if (p.sleepH == null) return; const x = gx(i), y = gyS(p.sleepH); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; });
   ctx.stroke(); ctx.setLineDash([]);
 }
+// ---------- „Was dir gut tut“: Tag D (was du gemacht hast) ↔ Nacht danach (Schlaf/Erholung an D+1) ----------
+// Früher wurde Tag D mit der Erholung von Tag D verglichen — Alkohol am Abend wirkt aber erst in der Nacht danach.
+function dayLogged(d) { return state.entries.some(e => e.date === d) || jLogged(state.journal[d]) || (state.suppLog[d] && Object.values(state.suppLog[d]).some(Boolean)); }
+function dayFeatures(d) {
+  const f = {}, j = state.journal[d] || {}, flags = j.flags || {};
+  for (const x of JFLAGS) if (x.k !== "gut") f["j:" + x.k] = !!flags[x.k];
+  const es = state.entries.filter(e => e.date === d);
+  if (es.some(e => e.at && e.at >= "21:00")) f["j:spaet"] = true; // spät gegessen automatisch aus der Uhrzeit
+  if (state.suppLog[d] && Object.values(state.suppLog[d]).some(Boolean)) for (const sp of state.supplements) f["s:" + sp.id] = !!state.suppLog[d][sp.id];
+  if (es.length) {
+    const kcal = es.reduce((a, e) => a + e.kcal, 0), p = es.reduce((a, e) => a + e.protein, 0), pT = proteinTarget();
+    if (pT) f["n:prot"] = p >= pT * 0.9;
+    f["n:over"] = kcal > (state.profile.kcalTarget || 0) * 1.15;
+    if (es.every(e => e.sugar != null)) f["n:sugar"] = es.reduce((a, e) => a + e.sugar, 0) > (state.profile.kcalTarget || 2000) * 0.10 / 4;
+    if (es.every(e => e.fiber != null)) f["n:fiber"] = es.reduce((a, e) => a + e.fiber, 0) >= FIBER_TARGET;
+  }
+  if (state.water[d]) f["n:water"] = state.water[d] >= (state.profile.waterTarget || 2500);
+  return f;
+}
+function featLabel(k) {
+  if (k.startsWith("j:")) { const x = JFLAGS.find(x => "j:" + x.k === k); return x ? x.t : k; }
+  if (k.startsWith("s:")) { const sp = state.supplements.find(x => "s:" + x.id === k); return sp ? "💊 " + sp.name : null; }
+  return ({ "n:prot": "🥩 Eiweiß-Ziel erreicht", "n:over": "🍽️ deutlich über kcal-Ziel", "n:sugar": "🍬 viel Zucker", "n:fiber": "🥦 30 g Ballaststoffe", "n:water": "💧 Wasser-Ziel erreicht" })[k] || k;
+}
+function wellbeingInsights() {
+  const rows = [];
+  for (const d of Object.keys(state.bodyLog)) {
+    const prev = dayOffset(d, -1), b = state.bodyLog[d];
+    if (!b || (b.sleepPerf == null && b.recovery == null) || !dayLogged(prev) || phaseActiveOn(prev)) continue;
+    rows.push({ f: dayFeatures(prev), sleep: b.sleepPerf, rec: b.recovery });
+  }
+  const keys = new Set(); rows.forEach(r => Object.keys(r.f).forEach(k => keys.add(k)));
+  const out = [];
+  for (const k of keys) {
+    const res = {};
+    for (const m of ["sleep", "rec"]) {
+      const w = rows.filter(r => r.f[k] === true && r[m] != null), wo = rows.filter(r => r.f[k] === false && r[m] != null);
+      if (w.length >= 3 && wo.length >= 3) {
+        const avg = (a) => a.reduce((s, r) => s + r[m], 0) / a.length;
+        res[m] = { diff: Math.round(avg(w) - avg(wo)), n: Math.min(w.length, wo.length) };
+      }
+    }
+    if (!res.sleep && !res.rec) continue;
+    const score = ((res.sleep ? res.sleep.diff : 0) + (res.rec ? res.rec.diff : 0)) / ((res.sleep ? 1 : 0) + (res.rec ? 1 : 0));
+    const n = Math.max(res.sleep ? res.sleep.n : 0, res.rec ? res.rec.n : 0);
+    const label = featLabel(k);
+    if (label && Math.abs(score) >= 3) out.push({ k, label, res, score, n });
+  }
+  return { rows: rows.length, out: out.sort((a, b) => Math.abs(b.score) - Math.abs(a.score)) };
+}
 function renderInsights() {
   const box = $("#insights"); if (!box) return;
-  // Tage mit Journal UND Recovery
-  const rows = [];
-  for (const date of Object.keys(state.bodyLog)) {
-    const b = state.bodyLog[date], j = state.journal[date];
-    if (b && b.recovery != null && jLogged(j)) rows.push({ date, rec: b.recovery, flags: j.flags || {} });
-  }
-  if (rows.length < 4) {
-    box.innerHTML = `<p class="hint">Noch ${Math.max(0, 4 - rows.length)} Journal-Tag(e) bis zur ersten Auswertung. Trag oben einfach täglich kurz ein, was war.</p>`;
-    return;
-  }
-  const out = [];
-  for (const f of JFLAGS) {
-    const withF = rows.filter(r => r.flags[f.k]), without = rows.filter(r => !r.flags[f.k]);
-    if (withF.length >= 2 && without.length >= 2) {
-      const avg = (a) => Math.round(a.reduce((s, r) => s + r.rec, 0) / a.length);
-      const aw = avg(withF), ao = avg(without), diff = aw - ao;
-      if (Math.abs(diff) >= 4) out.push({ t: f.t, aw, ao, diff });
-    }
-  }
-  if (!out.length) { box.innerHTML = `<p class="hint">Noch keine klaren Muster — sammle ein paar Tage mehr.</p>`; return; }
-  out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  box.innerHTML = out.slice(0, 4).map(o => {
-    const good = o.diff > 0;
-    return `<div class="insight ${good ? "good" : "bad"}"><b>${esc(o.t)}</b>: Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
-  }).join("");
+  const { rows, out } = wellbeingInsights();
+  if (rows < 6) { box.innerHTML = `<p class="hint">Noch ${6 - rows} Nächte mit Whoop-Daten und Einträgen vom Vortag bis zur ersten Auswertung. Hak im Journal einfach ab, was war — Essen, Supplements und Uhrzeiten zählen automatisch mit.</p>`; return; }
+  if (!out.length) { box.innerHTML = `<p class="hint">Bei ${rows} Nächten noch keine klaren Muster — wird mit jedem Tag genauer.</p>`; return; }
+  const strength = (o) => o.n >= 8 && Math.abs(o.score) >= 6 ? "deutlich" : o.n >= 5 ? "mittel" : "erste Tendenz";
+  const line = (o) => {
+    const parts = [];
+    if (o.res.sleep) parts.push(`Schlaf ${o.res.sleep.diff > 0 ? "+" : ""}${o.res.sleep.diff} %`);
+    if (o.res.rec) parts.push(`Erholung ${o.res.rec.diff > 0 ? "+" : ""}${o.res.rec.diff} %`);
+    return `<div class="insight ${o.score > 0 ? "good" : "bad"}"><b>${esc(o.label)}</b><span class="idiff">${parts.join(" · ")} in der Nacht danach · ${strength(o)}</span></div>`;
+  };
+  const good = out.filter(o => o.score > 0).slice(0, 5), bad = out.filter(o => o.score < 0).slice(0, 5);
+  box.innerHTML = (good.length ? `<h3 class="bsec" style="margin-top:4px">Tut dir gut</h3>` + good.map(line).join("") : "")
+    + (bad.length ? `<h3 class="bsec">Eher nicht</h3>` + bad.map(line).join("") : "")
+    + `<p class="hint">Aus ${rows} Nächten deiner eigenen Daten. Das sind Zusammenhänge, keine Beweise — sie werden mit jedem Tag genauer.</p>`;
 }
 on("#histRefresh", "click", () => loadHistory(true));
 
@@ -1465,13 +1554,16 @@ function renderVision(d) {
   const all = $("#visionAddAll"); if (all) all.onclick = () => addVisionAll(d.items);
 }
 function fillFromVision(it) {
-  per100 = it.grams > 0 ? { kcal: it.kcal / it.grams * 100, protein: it.protein / it.grams * 100, carbs: it.carbs / it.grams * 100, fat: it.fat / it.grams * 100 } : null;
+  per100 = it.grams > 0 ? { kcal: it.kcal / it.grams * 100, protein: it.protein / it.grams * 100, carbs: it.carbs / it.grams * 100, fat: it.fat / it.grams * 100,
+    fiber: it.fiber != null ? it.fiber / it.grams * 100 : null, sugar: it.sugar != null ? it.sugar / it.grams * 100 : null } : null;
   $("#fName").value = it.name;
   $("#fGrams").value = Math.round(it.grams) || 100;
   $("#fKcal").value = Math.round(it.kcal);
   $("#fProtein").value = round1(it.protein);
   $("#fCarbs").value = round1(it.carbs);
   $("#fFat").value = round1(it.fat);
+  $("#fFiber").value = it.fiber != null ? round1(it.fiber) : "";
+  $("#fSugar").value = it.sugar != null ? round1(it.sugar) : "";
   $("#per100hint").textContent = "Aus Foto geschätzt — Menge/Werte oben bei Bedarf anpassen, dann Hinzufügen.";
   $("#visionBox").innerHTML = "";
   $("#fName").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1479,7 +1571,9 @@ function fillFromVision(it) {
 function addVisionAll(items) {
   const meal = $("#mealSelect").value || "snack";
   for (const it of items) {
-    const e = { date: selDate, meal, name: it.name, grams: Math.round(it.grams) || 0, kcal: Math.round(it.kcal), protein: round1(it.protein), carbs: round1(it.carbs), fat: round1(it.fat) };
+    const e = { date: selDate, meal, name: it.name, grams: Math.round(it.grams) || 0, kcal: Math.round(it.kcal), protein: round1(it.protein), carbs: round1(it.carbs), fat: round1(it.fat),
+      fiber: it.fiber != null ? round1(it.fiber) : null, sugar: it.sugar != null ? round1(it.sugar) : null };
+    if (selDate === today()) { const d = new Date(); e.at = pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
     state.entries.push({ id: uid(), ...e }); rememberFood(e);
   }
   persist(); showSheet("food", false); renderDiary();
@@ -1565,36 +1659,7 @@ function weekFatCell(days) {
 }
 
 // ---------- Supplement → Recovery am Folgetag ----------
-function renderSuppInsights() {
-  const box = $("#insights"); if (!box) return;
-  const rows = [];
-  for (const date of Object.keys(state.bodyLog)) {
-    const b = state.bodyLog[date]; if (!b || b.recovery == null) continue;
-    const prev = dayOffset(date, -1);
-    const taken = state.suppLog[prev];
-    // Nur Vortage zählen, an denen überhaupt etwas abgehakt wurde — ein nicht geloggter Tag
-    // ist kein Beweis für „nicht genommen“.
-    if (!taken || !Object.values(taken).some(Boolean)) continue;
-    rows.push({ rec: b.recovery, taken });
-  }
-  if (rows.length < 5) return;
-  const out = [];
-  for (const s of state.supplements) {
-    const withS = rows.filter(r => r.taken[s.id]), without = rows.filter(r => !r.taken[s.id]);
-    if (withS.length >= 3 && without.length >= 3) {
-      const avg = a => Math.round(a.reduce((x, r) => x + r.rec, 0) / a.length);
-      const diff = avg(withS) - avg(without);
-      if (Math.abs(diff) >= 4) out.push({ name: s.name, aw: avg(withS), ao: avg(without), diff });
-    }
-  }
-  if (!out.length) return;
-  out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
-  box.insertAdjacentHTML("beforeend", `<h3 class="bsec" style="margin-top:14px">Supplements → Recovery am Folgetag</h3>` +
-    out.slice(0, 3).map(o => {
-      const good = o.diff > 0;
-      return `<div class="insight ${good ? "good" : "bad"}"><b>${esc(o.name)}</b>: Folgetag-Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
-    }).join(""));
-}
+function renderSuppInsights() { /* in renderInsights (wellbeingInsights) aufgegangen */ }
 
 // ---------- Haushalts-Portionen als zusätzliche Schnell-Mengen-Chips ----------
 (function addPortionChips() {
