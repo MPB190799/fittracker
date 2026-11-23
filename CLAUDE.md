@@ -30,6 +30,13 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
   Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 
+## Design
+- Markenwelt MB Capital: Gold `#D4AF37`, Dunkel `#080810`/`#0f0f1a`, Grün `#22c55e`, Rot `#ef4444`;
+  Schriften Outfit (Text) + IBM Plex Mono (Zahlen), lokal in `fonts/` (kein Google-Fonts-Abruf).
+- Ein Blickfang: Kompass-Zifferblatt im Tagebuch (außen kcal, innen Eiweiß). Rest ruhig halten:
+  Überschriften in Satzschreibung (keine Großbuchstaben-Labels), Linien-Icons statt Emojis in der Navigation.
+- Farb-Variablen in `style.css :root`; app.js nutzt `var(--green|gold|red)` inline.
+
 ## Prüfen (Definition of Done)
 ```bash
 node --check app.js && node --check whoop-worker/src/worker.js

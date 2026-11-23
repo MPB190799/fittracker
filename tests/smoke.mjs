@@ -48,7 +48,7 @@ Object.keys(st2.suppLog).length === 0 ? ok("Supplement an/aus sauber") : fail("s
 // 5) Gewicht + Chart
 await page.click('nav.tabs button[data-tab="weight"]');
 await page.fill("#weightInput", "88.5"); await page.click("#saveWeight");
-(await page.textContent("#weightList")).includes("88.5") ? ok("Gewicht gespeichert") : fail("Gewicht fehlt");
+(await page.textContent("#weightList")).includes("88,5") ? ok("Gewicht gespeichert") : fail("Gewicht fehlt");
 
 // 6) Vorlage: Frühstück speichern → an anderem Tag mit 1 Tipp einfügen
 await page.click('nav.tabs button[data-tab="diary"]');

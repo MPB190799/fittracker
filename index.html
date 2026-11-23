@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f1115" />
+  <meta name="theme-color" content="#080810" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-180.png" />
@@ -12,6 +12,8 @@
   <meta name="apple-mobile-web-app-title" content="FitTracker" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>FitTracker</title>
+  <link rel="preload" href="fonts/outfit-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
 </head>
@@ -21,42 +23,54 @@
 
   <div class="app">
     <header class="top">
-      <h1>Fit<span>Tracker</span></h1>
+      <h1 class="brand">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l2.6 10.2L28 8l-4.2 9.4L30 16l-10.2 2.6L24 28l-6.4-6.2L16 30l-1.6-8.2L8 28l2.2-9.4L2 16l10.2-2.6L4 4l9.4 4.2z" fill="currentColor"/><circle cx="16" cy="16" r="3" fill="#080810"/></svg>
+        FitTracker
+      </h1>
       <div class="date-nav">
-        <button id="prevDay" aria-label="Tag zurück">‹</button>
-        <input type="date" id="datePicker" />
-        <button id="nextDay" aria-label="Tag vor">›</button>
+        <button id="prevDay" aria-label="Tag zurück"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <label class="date-pill"><span id="dateLabel">Heute</span><input type="date" id="datePicker" aria-label="Datum wählen" /></label>
+        <button id="nextDay" aria-label="Tag vor"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
       </div>
     </header>
 
     <!-- TAB: Tagebuch -->
     <section class="tabpage active" id="tab-diary">
-      <div class="card hero">
-        <div class="rings">
-          <div class="ring">
-            <div class="dial">
-              <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog kcal" id="ringKcal" cx="50" cy="50" r="42"/></svg>
-              <div class="ring-c"><span id="restKcal">0</span><small>kcal übrig</small></div>
-            </div>
-            <div class="ring-sub" id="kcalSub">0 / 0</div>
-          </div>
-          <div class="ring">
-            <div class="dial">
-              <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="42"/><circle class="prog p" id="ringProt" cx="50" cy="50" r="42"/></svg>
-              <div class="ring-c"><span id="restProt">0</span><small>g Eiweiß übrig</small></div>
-            </div>
-            <div class="ring-sub" id="protSub">0 / 0</div>
+      <div class="hero">
+        <div class="dial" role="img" aria-label="Tagesziel: Kalorien und Eiweiß">
+          <svg viewBox="0 0 200 200" class="dial-svg">
+            <g class="ticks">
+              <line x1="100" y1="4" x2="100" y2="14" class="n"/><line x1="196" y1="100" x2="186" y2="100"/>
+              <line x1="100" y1="196" x2="100" y2="186"/><line x1="4" y1="100" x2="14" y2="100"/>
+              <line x1="167.9" y1="32.1" x2="163" y2="37"/><line x1="167.9" y1="167.9" x2="163" y2="163"/>
+              <line x1="32.1" y1="167.9" x2="37" y2="163"/><line x1="32.1" y1="32.1" x2="37" y2="37"/>
+            </g>
+            <g transform="rotate(-90 100 100)">
+              <circle class="track" cx="100" cy="100" r="78"/>
+              <circle class="prog kcal" id="ringKcal" cx="100" cy="100" r="78"/>
+              <circle class="track thin" cx="100" cy="100" r="62"/>
+              <circle class="prog p" id="ringProt" cx="100" cy="100" r="62"/>
+            </g>
+          </svg>
+          <div class="dial-c">
+            <span class="dial-num" id="restKcal">0</span>
+            <span class="dial-unit">kcal übrig</span>
+            <span class="dial-prot"><b id="restProt">0</b> g Eiweiß übrig</span>
           </div>
         </div>
+        <div class="hero-stats">
+          <div class="hs"><span class="hs-l"><i class="dot gold"></i>Gegessen (kcal)</span><span class="hs-v" id="kcalSub">0 / 0</span></div>
+          <div class="hs"><span class="hs-l"><i class="dot green"></i>Eiweiß (g)</span><span class="hs-v" id="protSub">0 / 0</span></div>
+        </div>
         <div class="macros2">
-          <div class="m2 c"><div class="m2-top"><span>KH</span><span><b id="cVal">0</b> <small id="cTgt"></small></span></div><div class="bar"><i id="cBar"></i></div></div>
+          <div class="m2 c"><div class="m2-top"><span>Kohlenhydrate</span><span><b id="cVal">0</b> <small id="cTgt"></small></span></div><div class="bar"><i id="cBar"></i></div></div>
           <div class="m2 f"><div class="m2-top"><span>Fett</span><span><b id="fVal">0</b> <small id="fTgt"></small></span></div><div class="bar"><i id="fBar"></i></div></div>
         </div>
       </div>
 
       <!-- Heute · Körper-Kurzblick (nur wenn Whoop-Daten vorliegen) -->
       <div class="card" id="todayBody" style="display:none">
-        <h2>Heute · Körper</h2>
+        <h2>Körper heute</h2>
         <div class="body-grid">
           <div class="bcard"><div class="bval" id="tbRec">–</div><div class="blbl">Recovery</div></div>
           <div class="bcard"><div class="bval" id="tbSleep">–</div><div class="blbl">Schlaf</div></div>
@@ -67,11 +81,15 @@
 
       <!-- Wasser -->
       <div class="card" id="waterCard">
-        <div class="body-head"><h2 style="margin:0">💧 Wasser</h2><span id="waterVal" class="ring-sub" style="margin:0">0 / 2.5 L</span></div>
-        <div class="water-dots" id="waterDots"></div>
-        <div class="row" style="margin-top:12px">
-          <button class="ghost" id="waterMinus" style="max-width:64px">−</button>
-          <button class="primary" id="waterPlus">+ Glas (250 ml)</button>
+        <div class="water">
+          <div class="water-main">
+            <div class="body-head"><h2>Wasser</h2><span id="waterVal" class="mono-sub">0 / 2.5 L</span></div>
+            <div class="water-dots" id="waterDots"></div>
+          </div>
+          <div class="water-btns">
+            <button class="icon-btn" id="waterMinus" aria-label="Glas abziehen"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+            <button class="icon-btn gold" id="waterPlus"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>Glas 250 ml</button>
+          </div>
         </div>
       </div>
 
@@ -96,12 +114,12 @@
       <div class="card" id="bodyConnect">
         <h2>Whoop verbinden</h2>
         <p class="hint" style="margin-top:0">Einmalig einrichten: App-Schlüssel eingeben → mit Whoop einloggen. Danach erscheinen <b>Recovery, Schlaf &amp; Strain</b> automatisch — alles an einem Ort.</p>
-        <div class="field"><label>App-Schlüssel</label><input id="whoopKey" autocomplete="off" placeholder="von Claude erhalten" /></div>
+        <div class="field"><label>App-Schlüssel</label><input id="whoopKey" autocomplete="off" placeholder="App-Schlüssel einfügen" /></div>
         <button class="primary" id="whoopConnect">Mit Whoop verbinden</button>
         <p class="hint" id="whoopMsg"></p>
       </div>
       <div class="card" id="bodyData" style="display:none">
-        <div class="body-head"><h2 style="margin:0">Heute · Körper</h2><button class="ghost" id="whoopRefresh" style="width:auto;padding:8px 12px">↻</button></div>
+        <div class="body-head"><h2 style="margin:0">Körper heute</h2><button class="ghost" id="whoopRefresh" style="width:auto;padding:8px 12px">↻</button></div>
         <div class="rec-hero"><div class="rec-big" id="recVal">–</div><div class="rec-meta"><div class="blbl">Recovery</div><div id="recAmpel" class="bsub"></div></div></div>
 
         <h3 class="bsec">Erholung</h3>
@@ -239,16 +257,16 @@
   </div>
 
   <!-- Schnell-Hinzufügen -->
-  <button id="fab" aria-label="Hinzufügen">+</button>
+  <button id="fab" aria-label="Essen hinzufügen"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
 
   <!-- bottom nav -->
   <nav class="tabs">
-    <button data-tab="diary" class="active"><span class="ic">📕</span>Tagebuch</button>
-    <button data-tab="body"><span class="ic">🫀</span>Körper</button>
-    <button data-tab="supps"><span class="ic">💊</span>Tabletten</button>
-    <button data-tab="weight"><span class="ic">⚖️</span>Gewicht</button>
-    <button data-tab="photos"><span class="ic">📷</span>Fotos</button>
-    <button data-tab="goals"><span class="ic">🎯</span>Ziele</button>
+    <button data-tab="diary" class="active"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a3 3 0 013 3v13H8a3 3 0 01-3-3z"/><path d="M5 17a3 3 0 013-3h11"/><path d="M9 8h6"/></svg>Tagebuch</button>
+    <button data-tab="body"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg>Körper</button>
+    <button data-tab="supps"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-35 12 12)"/><path d="M9.6 8.6l4.8 6.8" /></svg>Tabletten</button>
+    <button data-tab="weight"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14l-2-11H7z"/><circle cx="12" cy="6" r="2.5"/><path d="M12 13l2-2"/></svg>Gewicht</button>
+    <button data-tab="photos"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Fotos</button>
+    <button data-tab="goals"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".8" fill="currentColor"/></svg>Ziele</button>
   </nav>
 
   <!-- Add-food sheet -->

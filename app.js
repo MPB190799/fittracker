@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v13.1 · 2026-11-23";
+const APP_VERSION = "v14 · Design · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -126,7 +126,6 @@ const JFLAGS = [
   { k: "koffein", t: "☕ Koffein spät" }, { k: "stress", t: "😰 Stress" },
   { k: "sport", t: "🏋️ Sport" }, { k: "gut", t: "😴 gut geschlafen" }
 ];
-const RING_C = 2 * Math.PI * 42; // Umfang des Ring-Kreises (r=42)
 const LS_KEY = "fittracker:db";
 
 let state = load();
@@ -189,8 +188,9 @@ function showErr(msg) { const b = $("#errbar"); if (b) { b.textContent = "⚠ " 
 function setRing(id, pct) {
   const el = $("#" + id); if (!el) return;
   const p = Math.min(1, Math.max(0, pct || 0));
-  el.style.strokeDasharray = RING_C;
-  el.style.strokeDashoffset = RING_C * (1 - p);
+  const C = 2 * Math.PI * Number(el.getAttribute("r") || 42); // Umfang je Ring (Kompass: außen kcal, innen Eiweiß)
+  el.style.strokeDasharray = C;
+  el.style.strokeDashoffset = C * (1 - p);
   el.classList.toggle("over", pct > 1.0001);
 }
 function renderSummary() {
@@ -695,7 +695,7 @@ function renderWeight() {
   [...state.weights].reverse().forEach(w => {
     const row = document.createElement("div");
     row.className = "entry";
-    row.innerHTML = `<div class="info"><div class="nm">${esc(w.date)}</div></div><div class="kc">${w.kg} kg</div><button class="x">✕</button>`;
+    row.innerHTML = `<div class="info"><div class="nm">${esc(dateLabel(w.date))}</div></div><div class="kc">${(Math.round(w.kg * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 })} kg</div><button class="x" aria-label="Eintrag löschen">✕</button>`;
     row.querySelector(".x").onclick = () => { state.weights = state.weights.filter(x => x.id !== w.id); persist(); renderWeight(); renderSummary(); fillGoals(); };
     list.appendChild(row);
   });
@@ -707,16 +707,20 @@ function drawWeightChart() {
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
   const pts = state.weights.slice(-30);
-  if (pts.length < 2) { ctx.fillStyle = "#9aa3b2"; ctx.font = "13px sans-serif"; ctx.fillText("Mind. 2 Einträge für den Verlauf.", 10, 80); return; }
+  if (pts.length < 2) { ctx.fillStyle = "#8c8aa0"; ctx.font = "14px Outfit, sans-serif"; ctx.fillText("Ab 2 Einträgen erscheint hier dein Verlauf.", 4, 80); return; }
   const ys = pts.map(p => p.kg); let min = Math.min(...ys), max = Math.max(...ys); if (min === max) { min -= 1; max += 1; }
   // x nach echtem Datum (Lücken sichtbar), nicht gleichmäßig nach Index
   const dnum = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
   const t0 = dnum(pts[0].date), span = Math.max(1, dnum(pts[pts.length - 1].date) - t0);
   const pad = 24, gx = (i) => pad + (dnum(pts[i].date) - t0) / span * (W - 2 * pad), gy = (v) => H - pad - (v - min) / (max - min) * (H - 2 * pad);
-  ctx.strokeStyle = "#5b9bef"; ctx.lineWidth = 2; ctx.beginPath();
+  const grad = ctx.createLinearGradient(0, pad, 0, H - pad);
+  grad.addColorStop(0, "rgba(212,175,55,.22)"); grad.addColorStop(1, "rgba(212,175,55,0)");
+  ctx.beginPath(); pts.forEach((p, i) => { i ? ctx.lineTo(gx(i), gy(p.kg)) : ctx.moveTo(gx(i), gy(p.kg)); });
+  ctx.lineTo(gx(pts.length - 1), H - pad); ctx.lineTo(gx(0), H - pad); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = "#D4AF37"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
   pts.forEach((p, i) => { i ? ctx.lineTo(gx(i), gy(p.kg)) : ctx.moveTo(gx(i), gy(p.kg)); }); ctx.stroke();
-  ctx.fillStyle = "#5b9bef"; pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(gx(i), gy(p.kg), 3, 0, 7); ctx.fill(); });
-  ctx.fillStyle = "#9aa3b2"; ctx.font = "11px sans-serif"; ctx.fillText(max.toFixed(1), 2, gy(max) + 4); ctx.fillText(min.toFixed(1), 2, gy(min) + 4);
+  const li = pts.length - 1; ctx.fillStyle = "#D4AF37"; ctx.beginPath(); ctx.arc(gx(li), gy(pts[li].kg), 4, 0, 7); ctx.fill();
+  ctx.fillStyle = "#8c8aa0"; ctx.font = "11px 'IBM Plex Mono', monospace"; ctx.fillText(max.toFixed(1), 2, gy(max) - 6); ctx.fillText(min.toFixed(1), 2, gy(min) + 14);
 }
 
 // ---------- photos ----------
@@ -826,7 +830,16 @@ function shiftDay(d) {
   selDate = dayOffset(selDate, d);
   refreshDate();
 }
-function refreshDate() { $("#datePicker").value = selDate; renderDiary(); renderSupps(); renderJournal(); }
+const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"], MON = ["Jan", "Feb", "März", "Apr", "Mai", "Juni", "Juli", "Aug", "Sep", "Okt", "Nov", "Dez"];
+function dateLabel(ds) {
+  const t = today();
+  if (ds === t) return "Heute";
+  if (ds === dayOffset(t, -1)) return "Gestern";
+  if (ds === dayOffset(t, 1)) return "Morgen";
+  const [y, m, d] = ds.split("-").map(Number), dt = new Date(y, m - 1, d);
+  return WD[dt.getDay()] + ", " + d + ". " + MON[m - 1] + (y !== new Date().getFullYear() ? " " + y : "");
+}
+function refreshDate() { $("#datePicker").value = selDate; const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); renderDiary(); renderSupps(); renderJournal(); }
 
 // ---------- FAB (schnell hinzufügen) ----------
 on("#fab", "click", () => {
@@ -889,7 +902,7 @@ function renderWhoop(d) {
   // Recovery-Hero
   set("recVal", rec.score != null ? rec.score + "%" : "–");
   const amp = $("#recAmpel");
-  if (amp) amp.textContent = rec.score != null ? (rec.score >= 67 ? "🟢 erholt" : rec.score >= 34 ? "🟡 mittel" : "🔴 niedrig") : "";
+  if (amp) { amp.textContent = rec.score != null ? (rec.score >= 67 ? "gut erholt" : rec.score >= 34 ? "mittel erholt" : "wenig erholt") : ""; amp.style.color = rec.score == null ? "" : rec.score >= 67 ? "var(--green)" : rec.score >= 34 ? "var(--gold)" : "var(--red)"; }
   const rv = $("#recVal");
   if (rv) rv.style.color = rec.score == null ? "var(--text)" : rec.score >= 67 ? "var(--green)" : rec.score >= 34 ? "var(--gold)" : "var(--red)";
   // Erholung
@@ -976,21 +989,21 @@ function drawTrend() {
   const dpr = window.devicePixelRatio || 1, W = cv.clientWidth || 320, H = 150;
   cv.width = W * dpr; cv.height = H * dpr;
   const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
-  if (pts.length < 2) { ctx.fillStyle = "#9aa3b2"; ctx.font = "13px sans-serif"; ctx.fillText("Noch zu wenig Tage für den Verlauf.", 10, 75); return; }
+  if (pts.length < 2) { ctx.fillStyle = "#8c8aa0"; ctx.font = "14px Outfit, sans-serif"; ctx.fillText("Ab 2 Tagen mit Körperdaten erscheint hier der Verlauf.", 4, 75); return; }
   const pad = 22, n = pts.length;
   const gx = (i) => pad + i * (W - 2 * pad) / (n - 1);
   // Recovery 0-100 (gold)
   const gyR = (v) => H - pad - (v / 100) * (H - 2 * pad);
-  ctx.strokeStyle = "#d4af37"; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.strokeStyle = "#D4AF37"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
   let started = false;
   pts.forEach((p, i) => { if (p.recovery == null) return; const x = gx(i), y = gyR(p.recovery); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; });
   ctx.stroke();
-  ctx.fillStyle = "#d4af37"; pts.forEach((p, i) => { if (p.recovery == null) return; ctx.beginPath(); ctx.arc(gx(i), gyR(p.recovery), 2.5, 0, 7); ctx.fill(); });
+  ctx.fillStyle = "#D4AF37"; pts.forEach((p, i) => { if (p.recovery == null) return; ctx.beginPath(); ctx.arc(gx(i), gyR(p.recovery), 2.5, 0, 7); ctx.fill(); });
   // Schlaf h 0-10 (blau)
   const gyS = (v) => H - pad - (Math.min(v, 10) / 10) * (H - 2 * pad);
-  ctx.strokeStyle = "#5b9bef"; ctx.lineWidth = 2; ctx.beginPath(); started = false;
+  ctx.strokeStyle = "#7c8cf8"; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); started = false;
   pts.forEach((p, i) => { if (p.sleepH == null) return; const x = gx(i), y = gyS(p.sleepH); started ? ctx.lineTo(x, y) : ctx.moveTo(x, y); started = true; });
-  ctx.stroke();
+  ctx.stroke(); ctx.setLineDash([]);
 }
 function renderInsights() {
   const box = $("#insights"); if (!box) return;
@@ -1017,7 +1030,7 @@ function renderInsights() {
   out.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
   box.innerHTML = out.slice(0, 4).map(o => {
     const good = o.diff > 0;
-    return `<div class="insight ${good ? "good" : "bad"}">${good ? "🟢" : "🔻"} <b>${esc(o.t)}</b>: Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
+    return `<div class="insight ${good ? "good" : "bad"}"><b>${esc(o.t)}</b>: Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
   }).join("");
 }
 on("#histRefresh", "click", () => loadHistory(true));
@@ -1110,7 +1123,7 @@ function renderWater() {
   if (dots) {
     const n = Math.max(1, Math.round(tgt / 250)), filled = Math.round(ml / 250);
     dots.innerHTML = "";
-    for (let i = 0; i < n; i++) { const s = document.createElement("span"); s.className = "wdot" + (i < filled ? " on" : ""); s.textContent = "💧"; dots.appendChild(s); }
+    for (let i = 0; i < n; i++) { const s = document.createElement("span"); s.className = "wseg" + (i < filled ? " on" : ""); dots.appendChild(s); }
   }
 }
 on("#waterPlus", "click", () => { state.water[selDate] = waterMl() + 250; persist(); renderWater(); });
@@ -1123,8 +1136,8 @@ function renderTodayBody() {
   if (!b || (b.recovery == null && b.sleepH == null && b.strain == null)) { card.style.display = "none"; return; }
   card.style.display = "block";
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
-  const amp = b.recovery == null ? "" : b.recovery >= 67 ? "🟢" : b.recovery >= 34 ? "🟡" : "🔴";
-  set("tbRec", b.recovery != null ? amp + " " + b.recovery + "%" : "–");
+  set("tbRec", b.recovery != null ? b.recovery + "%" : "–");
+  const tr = $("#tbRec"); if (tr) tr.style.color = b.recovery == null ? "" : b.recovery >= 67 ? "var(--green)" : b.recovery >= 34 ? "var(--gold)" : "var(--red)";
   set("tbSleep", b.sleepH != null ? b.sleepH + " h" : "–");
   set("tbStrain", b.strain != null ? b.strain : "–");
   let reco;
@@ -1194,7 +1207,7 @@ function renderSuppInsights() {
   box.insertAdjacentHTML("beforeend", `<h3 class="bsec" style="margin-top:14px">Supplements → Recovery am Folgetag</h3>` +
     out.slice(0, 3).map(o => {
       const good = o.diff > 0;
-      return `<div class="insight ${good ? "good" : "bad"}">${good ? "🟢" : "🔻"} <b>${esc(o.name)}</b>: Folgetag-Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
+      return `<div class="insight ${good ? "good" : "bad"}"><b>${esc(o.name)}</b>: Folgetag-Recovery Ø <b>${o.aw}%</b> vs <b>${o.ao}%</b> ohne <span class="idiff">(${o.diff > 0 ? "+" : ""}${o.diff})</span></div>`;
     }).join(""));
 }
 
@@ -1213,6 +1226,7 @@ function renderSuppInsights() {
 function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderAdaptive(); }
 try {
   $("#datePicker").value = selDate;
+  { const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); }
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
   renderAll();
   maybeOnboard();
