@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v18 · 2026-11-23";
+const APP_VERSION = "v19 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -115,6 +115,7 @@ const PORTIONS = [
 const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0,
     heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null, goalMode: "rec",
+    whoopBonus: true, lastCheckin: null,
     neckCm: null, hipCm: null, bfManual: null, goalBf: null },
   phase: null, // { type: "soup"|"buchinger"|"if16", start, days, kcal, winStart, winEnd }
   entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
@@ -127,7 +128,7 @@ const DEFAULT = {
 const JFLAGS = [
   { k: "alkohol", t: "🍺 Alkohol" }, { k: "spaet", t: "🌙 spät gegessen" },
   { k: "koffein", t: "☕ Koffein spät" }, { k: "stress", t: "😰 Stress" },
-  { k: "sport", t: "🏋️ Sport" }, { k: "gut", t: "😴 gut geschlafen" }
+  { k: "sport", t: "🏸 Sport/Cardio" }, { k: "kraft", t: "🏋️ Krafttraining" }, { k: "gut", t: "😴 gut geschlafen" }
 ];
 const LS_KEY = "fittracker:db";
 
@@ -216,7 +217,9 @@ function renderSummary() {
   const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat }), { kcal: 0, p: 0, c: 0, f: 0 });
   const pinfo = phaseDayInfo(selDate);
   const pT = pinfo && pinfo.fasting ? null : proteinTarget(); // an Fastentagen kein Eiweiß-Ziel
-  const kT = (pinfo && pinfo.kcal) || state.profile.kcalTarget || 0;
+  const bonus = pinfo && pinfo.kcal ? 0 : whoopBonus(selDate);
+  const kT = ((pinfo && pinfo.kcal) || state.profile.kcalTarget || 0) + bonus;
+  const bl = $("#bonusLine"); if (bl) bl.innerHTML = bonus ? `inkl. <b>+${bonus}</b> Whoop-Bonus` : "";
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
   // kcal-Ring (Mitte = übrig)
   const restK = Math.round(kT - sum.kcal);
@@ -334,6 +337,85 @@ function renderTemplatesList() {
 // ---------- Körper & Ziel: Startwert per Formel (Mifflin-St Jeor) ----------
 // Grundumsatz = 10×kg + 6,25×cm − 5×Alter + 5 (Mann) bzw. −161 (Frau); × Aktivitätsfaktor = Verbrauch.
 // Defizit/Überschuss = Tempo (kg/Woche) × 7700 / 7. Nie unter den Grundumsatz und nie unter 1500/1200 kcal.
+
+// ---------- Whoop-Bonus: Mehrverbrauch an aktiven Tagen ----------
+// Liegt Whoops Tagesverbrauch über deinem geplanten Verbrauch, darfst du die Hälfte davon zusätzlich essen.
+// Nur die Hälfte, weil Tracker den Verbrauch eher überschätzen — so bleibt der Cut sicher.
+function whoopBonus(date) {
+  if (!state.profile.whoopBonus) return 0;
+  const b = state.bodyLog[date]; if (!b || !(b.kcalBurn > 0)) return 0;
+  const t = tdeeRef(); if (!t) return 0;
+  const extra = b.kcalBurn - t;
+  return extra > 150 ? Math.round(extra * 0.5 / 10) * 10 : 0;
+}
+
+// ---------- Krafttraining (über Journal-Flags) ----------
+function trainCount(flag, n) { let c = 0; for (let i = 0; i < n; i++) { const j = state.journal[dayOffset(today(), -i)]; if (j && j.flags && j.flags[flag]) c++; } return c; }
+function renderTrain() {
+  const box = $("#trainChips"); if (!box) return;
+  const j = jToday();
+  box.innerHTML = "";
+  for (const f of JFLAGS.filter(x => x.k === "kraft" || x.k === "sport")) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip" + (j.flags && j.flags[f.k] ? " on" : "");
+    b.textContent = f.t;
+    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderTrain(); renderJournal(); };
+    box.appendChild(b);
+  }
+  const k7 = trainCount("kraft", 7);
+  const wk = $("#trainWeek"); if (wk) wk.textContent = k7 + "× Kraft / 7 Tage";
+  const h = $("#trainHint");
+  if (h) h.textContent = planDir() < 0 && k7 === 0 ? "Diese Woche noch kein Krafttraining — 2–3× pro Woche schützt im Cut deine Muskeln, dann schmilzt vor allem Fett."
+    : planDir() < 0 && k7 < 2 ? "Noch eine Krafteinheit diese Woche wäre ideal für den Muskelerhalt." : "";
+}
+
+// ---------- Backup (Teilen → OneDrive) + wöchentliche Erinnerung ----------
+function lastBackup() { try { return localStorage.getItem("fittracker:lastBackup") || ""; } catch { return ""; } }
+async function doBackup() {
+  const photos = {};
+  for (const p of state.photos) { const url = await idbGet(p.id); if (url) photos[p.id] = url; }
+  const name = `mb-fit-backup-${today()}.json`;
+  const blob = new Blob([JSON.stringify({ v: 1, state, photos }, null, 2)], { type: "application/json" });
+  let ok = false;
+  try {
+    const file = new File([blob], name, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "MB FIT Backup" }); ok = true; }
+  } catch (e) { if (e && e.name === "AbortError") return; } // abgebrochen → nicht als gesichert merken
+  if (!ok) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); ok = true; }
+  try { localStorage.setItem("fittracker:lastBackup", today()); } catch {}
+  renderNudges(); renderBackupInfo();
+}
+function renderBackupInfo() { const el = $("#lastBackupTxt"); if (el) el.textContent = lastBackup() ? "Letztes Backup: " + dateLabel(lastBackup()) + "." : "Noch kein Backup."; }
+
+// ---------- Wochen-Check: neues Kalorienziel vorschlagen ----------
+function checkinSuggestion() {
+  const P = state.profile;
+  if (phaseActiveOn(today())) return null;
+  if (P.lastCheckin && P.lastCheckin > dayOffset(today(), -7)) return null;
+  const a = adaptiveEstimate(), p = bodyPlan();
+  const kcal = a.ok ? a.target : p.ok ? p.kcal : null; if (!kcal) return null;
+  if (Math.abs(kcal - P.kcalTarget) < 50) return null;
+  return { kcal, why: a.ok ? `aus deinem echten Verbrauch der letzten 4 Wochen (${a.tdee} kcal)` : "aus deinem aktuellen Gewicht" };
+}
+
+// ---------- Hinweise oben im Tagebuch ----------
+function renderNudges() {
+  const box = $("#nudges"); if (!box) return;
+  if (selDate !== today()) { box.innerHTML = ""; return; }
+  let html = "";
+  const c = checkinSuggestion();
+  if (c) html += `<div class="card nudge"><div class="nudge-t">Wochen-Check</div>
+    <div class="nudge-s">Neues Tagesziel <b>${c.kcal} kcal</b> statt ${state.profile.kcalTarget} — ${c.why}.</div>
+    <div class="row nudge-b"><button class="primary" id="ciApply">Übernehmen</button><button class="ghost" id="ciLater">Später</button></div></div>`;
+  const lb = lastBackup(), hasData = state.entries.length + state.weights.length > 0;
+  if (hasData && (!lb || lb <= dayOffset(today(), -7))) html += `<div class="card nudge"><div class="nudge-t">Backup fällig</div>
+    <div class="nudge-s">${lb ? "Letztes Backup: " + dateLabel(lb) : "Du hast noch kein Backup"} — sichere deine Daten in OneDrive.</div>
+    <div class="row nudge-b"><button class="primary" id="bkNow">Jetzt sichern</button></div></div>`;
+  box.innerHTML = html;
+  const ap = $("#ciApply"); if (ap) ap.onclick = () => { state.profile.kcalTarget = c.kcal; state.profile.lastCheckin = today(); persist(); fillGoals(); renderDiary(); renderNudges(); };
+  const lt = $("#ciLater"); if (lt) lt.onclick = () => { state.profile.lastCheckin = today(); persist(); renderNudges(); };
+  const bk = $("#bkNow"); if (bk) bk.onclick = doBackup;
+}
 
 // ---------- Fasten & Sonderphasen ----------
 // Suppenwoche: festes kcal-Ziel. Heilfasten (Buchinger): 1 Entlastungstag ≤ 1000 kcal, Fastentage
@@ -499,6 +581,7 @@ function fillPlanInputs() {
   const P = state.profile, set = (id, v) => { const el = $("#" + id); if (el && document.activeElement !== el) el.value = v == null ? "" : v; };
   set("pHeight", P.heightCm); set("pBirth", P.birthYear); set("pSex", P.sex || "m");
   set("pAct", String(P.activity || 1.375)); set("pGoalW", P.goalWeight);
+  { const wb = $("#pWhoopBonus"); if (wb) wb.checked = P.whoopBonus !== false; }
   set("pNeck", P.neckCm); set("pHip", P.hipCm); set("pGoalBf", P.goalBf); set("pBfManual", P.bfManual);
   const hr = $("#hipRow"); if (hr) hr.style.display = P.sex === "w" ? "flex" : "none";
   const gwEl = $("#pGoalW"); if (gwEl) { const usesBf = Number(P.goalBf) > 0 && bodyComp(); gwEl.disabled = !!usesBf; gwEl.placeholder = usesBf ? "≈ " + fmtKg(goalW()) + " kg (aus Körperfett-Ziel)" : "nur falls kein Körperfett-Ziel"; }
@@ -559,6 +642,7 @@ on("#pBirth", "change", (e) => savePlanField("birthYear", e.target.value, true))
 on("#pSex", "change", (e) => savePlanField("sex", e.target.value, false));
 on("#pAct", "change", (e) => savePlanField("activity", e.target.value, true));
 on("#pGoalW", "change", (e) => savePlanField("goalWeight", e.target.value, true));
+on("#pWhoopBonus", "change", (e) => { state.profile.whoopBonus = e.target.checked; persist(); renderSummary(); });
 on("#pNeck", "change", (e) => savePlanField("neckCm", e.target.value, true));
 on("#pHip", "change", (e) => savePlanField("hipCm", e.target.value, true));
 on("#pGoalBf", "change", (e) => savePlanField("goalBf", e.target.value, true));
@@ -616,9 +700,13 @@ function adaptiveEstimate() {
   const intake = days.reduce((a, k) => a + k, 0) / days.length;
   const slopeKgDay = linSlope(ws.map(w => ({ x: dnum(w.date), y: w.kg })));
   const tdee = intake - slopeKgDay * KCAL_PER_KG;
+  // Plausibilität: Tippfehler beim Gewicht (z.B. 11,0 statt 110) oder Sprünge würden absurde Werte liefern.
+  // Außerhalb 1200–6000 kcal oder > 2 kg/Woche Trend → lieber keine Schätzung als eine falsche.
+  if (!(tdee >= 1200 && tdee <= 6000) || Math.abs(slopeKgDay * 7) > 2)
+    return { ok: false, need: ["einen gleichmäßigeren Gewichtsverlauf — prüf deine Einträge auf Tippfehler"], loggedDays: days.length, weighIns: ws.length };
   const rate = planRate(); // kg/Woche, aus Zielgewicht + gewählter Stufe
   let target = tdee + rate * KCAL_PER_KG / 7;
-  target = Math.round(Math.max(1400, target) / 10) * 10; // Sicherheitsboden, auf 10 gerundet
+  target = Math.round(Math.max(state.profile.sex === "w" ? 1200 : 1500, target) / 10) * 10; // gleiche Untergrenze wie im Plan
   return { ok: true, intake: Math.round(intake), tdee: Math.round(tdee), trendWeek: Math.round(slopeKgDay * 7 * 100) / 100, target, loggedDays: days.length, weighIns: ws.length };
 }
 function renderAdaptive() {
@@ -641,7 +729,7 @@ function renderAdaptive() {
 }
 
 
-function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
+function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); renderTrain(); renderNudges(); }
 
 // ---------- supplements ----------
 // Nur LESEN legt nichts an (früher erzeugte schon das Durchblättern leere Tage → die
@@ -1080,15 +1168,7 @@ on("#saveGoals", "click", () => {
 });
 
 // ---------- backup ----------
-on("#exportBtn", "click", async () => {
-  const photos = {};
-  for (const p of state.photos) { const url = await idbGet(p.id); if (url) photos[p.id] = url; }
-  const blob = new Blob([JSON.stringify({ v: 1, state, photos }, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `mb-fit-backup-${today()}.json`;
-  a.click();
-});
+on("#exportBtn", "click", doBackup);
 on("#importBtn", "click", () => $("#importFile").click());
 on("#importFile", "change", async (e) => {
   const file = e.target.files[0]; if (!file) return;
@@ -1215,7 +1295,8 @@ function renderWhoop(d) {
   set("whoopTs", d.ts ? "Stand: " + new Date(d.ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "");
   // heutigen Snapshot lokal speichern (Historie)
   if (rec.score != null || slp.asleepH != null || str.strain != null) {
-    state.bodyLog[today()] = { recovery: rec.score, hrv: rec.hrv, rhr: rec.rhr, sleepH: slp.asleepH, sleepPerf: slp.performance, strain: str.strain };
+    state.bodyLog[today()] = { ...(state.bodyLog[today()] || {}), recovery: rec.score, hrv: rec.hrv, rhr: rec.rhr, sleepH: slp.asleepH, sleepPerf: slp.performance, strain: str.strain, kcalBurn: str.kcal };
+    renderSummary(); renderNudges();
     persist();
   }
 }
@@ -1234,7 +1315,7 @@ function renderJournal() {
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip" + (j.flags[f.k] ? " on" : "");
     b.textContent = f.t;
-    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderJournal(); };
+    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderJournal(); renderTrain(); };
     box.appendChild(b);
   }
   const mood = $("#jmood");
@@ -1468,7 +1549,8 @@ function renderWeekReport() {
     cell(daysLogged + "/7", "Tage geloggt", "Essen") +
     cell(pT ? proteinHits + "/" + daysLogged : null, "Eiweiß-Ziel", "Tage erreicht") +
     cell(avg(recs) != null ? avg(recs) + "%" : null, "Ø Recovery", recs.length ? recs.length + " Tage" : "") +
-    cell(avg1(sleeps) != null ? avg1(sleeps) + " h" : null, "Ø Schlaf", "") + weekFatCell(days);
+    cell(avg1(sleeps) != null ? avg1(sleeps) + " h" : null, "Ø Schlaf", "") + weekFatCell(days) +
+    cell(trainCount("kraft", 7) + "×", "Krafttraining", "Ziel 2–3×") + cell(trainCount("sport", 7) + "×", "Sport/Cardio", "");
 }
 
 // Fett-Bilanz der Woche: Σ(Verbrauch − gegessen) / 7700 — Verbrauch gemessen (falls genug Daten), sonst Formel
@@ -1526,7 +1608,7 @@ function renderSuppInsights() {
 })();
 
 // ---------- boot ----------
-function renderAll() { renderPhaseBanner(); renderPhaseCard(); renderAll0(); }
+function renderAll() { renderPhaseBanner(); renderPhaseCard(); renderAll0(); renderBackupInfo(); }
 function renderAll0() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); renderGoalProgress(); }
 try {
   $("#datePicker").value = selDate;

@@ -36,8 +36,13 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Sonderphasen (`state.phase`): Suppenwoche (kcal fix), Heilfasten Buchinger (1 Entlastungstag ≤1000, Fastentage
   250–500, 2 Aufbautage; >7 Tage nur mit Arzt-Hinweis), Intervallfasten 16:8 (Essensfenster). Phasentage zählen
   nicht in die Verbrauchsmessung (`adaptiveEstimate`).
+- Whoop-Bonus (`whoopBonus`): Whoop-Tagesverbrauch über Plan-/Messverbrauch → 50 % davon ins Tagesziel (abschaltbar).
+- Wochen-Check (`checkinSuggestion`): alle 7 Tage neues kcal-Ziel vorschlagen (Messung, sonst Formel).
+- Backup (`doBackup`): Teilen-Menü (→ OneDrive), sonst Download; Erinnerung nach 7 Tagen (`fittracker:lastBackup`).
+- Krafttraining/Sport = Journal-Flags `kraft`/`sport`, Karte „Training heute“ im Tagebuch.
 - Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
-  Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
+  Nie ohne genug Daten schätzen; Plausibilität 1200–6000 kcal und ≤ 2 kg/Woche Trend (Tippfehler-Schutz);
+  Untergrenze 1500/1200 kcal wie im Plan.
 
 ## Design
 - App-Name: **MB FIT** (Marcos Wahl 23.11.2026). Interne Keys (`fittracker:db`, Worker-Name) bleiben unverändert — sonst sind Daten/Whoop-Login weg.

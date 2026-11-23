@@ -38,6 +38,7 @@
     <!-- TAB: Tagebuch -->
     <section class="tabpage active" id="tab-diary">
       <div class="card phase-banner" id="phaseBanner" style="display:none"></div>
+      <div id="nudges"></div>
       <div class="hero">
         <div class="dial" role="img" aria-label="Tagesziel: Kalorien und Eiweiß">
           <svg viewBox="0 0 200 200" class="dial-svg">
@@ -67,6 +68,7 @@
           <div class="hs"><span class="hs-l"><i class="dot gold"></i>Gegessen (kcal)</span><span class="hs-v" id="kcalSub">0 / 0</span></div>
           <div class="hs"><span class="hs-l"><i class="dot green"></i>Eiweiß (g)</span><span class="hs-v" id="protSub">0 / 0</span></div>
         </div>
+        <p class="bonus-line" id="bonusLine"></p>
         <div class="macros2">
           <div class="m2 c"><div class="m2-top"><span>Kohlenhydrate</span><span><b id="cVal">0</b> <small id="cTgt"></small></span></div><div class="bar"><i id="cBar"></i></div></div>
           <div class="m2 f"><div class="m2-top"><span>Fett</span><span><b id="fVal">0</b> <small id="fTgt"></small></span></div><div class="bar"><i id="fBar"></i></div></div>
@@ -96,6 +98,12 @@
             <button class="icon-btn gold" id="waterPlus"><svg viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></svg>Glas 250 ml</button>
           </div>
         </div>
+      </div>
+
+      <div class="card" id="trainCard">
+        <div class="body-head"><h2>Training heute</h2><span class="mono-sub" id="trainWeek"></span></div>
+        <div class="chips" id="trainChips"></div>
+        <p class="hint" id="trainHint"></p>
       </div>
 
       <div class="card" id="mealsCard"><!-- meals injected --></div>
@@ -242,6 +250,7 @@
             <option value="1.725">Körperlicher Job oder täglich Sport</option>
           </select>
         </div>
+        <label class="check" style="margin:-2px 0 14px"><input type="checkbox" id="pWhoopBonus" /> An aktiven Tagen Whoop-Mehrverbrauch zur Hälfte gutschreiben</label>
         <div class="field"><label id="modeLbl">Wie stark?</label><div class="modes" id="planModes"></div></div>
         <div id="planBox"></div>
       </div>
@@ -294,9 +303,9 @@
       </div>
       <div class="card">
         <h2>Backup</h2>
-        <p class="hint">Deine Daten liegen nur in <b>diesem Browser</b>. Vor Browser-Wechsel/Handy-Umzug exportieren — und auf dem neuen Gerät importieren.</p>
+        <p class="hint">Deine Daten liegen nur auf diesem Handy. „Backup sichern“ öffnet das Teilen-Menü — dort <b>OneDrive</b> wählen. Die App erinnert dich jede Woche daran. <span id="lastBackupTxt"></span></p>
         <div class="row">
-          <button class="ghost" id="exportBtn">Backup exportieren</button>
+          <button class="ghost" id="exportBtn">Backup sichern</button>
           <button class="ghost" id="importBtn">Backup importieren</button>
         </div>
         <input type="file" accept="application/json" id="importFile" style="display:none" />

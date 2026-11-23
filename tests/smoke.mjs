@@ -141,5 +141,36 @@ await page.evaluate(() => { state.phase = { type: "buchinger", start: dayOffset(
 await page.evaluate(() => { state.phase = { type: "buchinger", start: dayOffset(today(), -6), days: 5, kcal: 500 }; persist(); renderAll(); });
 /Aufbautag 1 von 2/.test(await page.textContent("#phaseBanner")) ? ok("Heilfasten: Aufbautage automatisch geplant") : fail("Aufbau: " + await page.textContent("#phaseBanner"));
 
+// 11) Backup-Erinnerung → sichern → verschwindet (ohne Teilen-Menü: Download)
+await page.evaluate(() => { state.phase = null; persist(); localStorage.removeItem("fittracker:lastBackup"); renderAll(); });
+await page.click('nav.tabs button[data-tab="diary"]');
+const hasBk = await page.$("#bkNow");
+const dl = page.waitForEvent("download").catch(() => null);
+if (hasBk) await page.click("#bkNow");
+await dl;
+hasBk && (await page.evaluate(() => localStorage.getItem("fittracker:lastBackup"))) === (await page.evaluate(() => today())) && !(await page.$("#bkNow"))
+  ? ok("Backup-Erinnerung → gesichert → Erinnerung weg") : fail("Backup-Flow");
+
+// 11b) Gewichtssprung (88 → 110 kg) darf keine absurde Verbrauchsschätzung liefern
+const adj = await page.evaluate(() => adaptiveEstimate());
+!adj.ok || (adj.tdee >= 1200 && adj.tdee <= 6000) ? ok("Unplausibler Gewichtssprung → keine falsche Schätzung") : fail("Adaptiv absurd: " + adj.tdee);
+
+// 12) Whoop-Bonus: Whoop-Verbrauch 600 über Plan → +300 kcal im Tagesziel
+const bon = await page.evaluate(() => { const t = tdeeRef(); state.bodyLog[today()] = { kcalBurn: t + 600 }; state.profile.whoopBonus = true; persist(); renderAll(); return { t, kT: state.profile.kcalTarget }; });
+const sub12 = (await page.textContent("#kcalSub")).trim();
+sub12.endsWith("/ " + (bon.kT + 300)) && /\+300/.test(await page.textContent("#bonusLine")) ? ok(`Whoop-Bonus: +300 kcal (Ziel ${bon.kT + 300})`) : fail("Bonus: " + sub12);
+await page.evaluate(() => { state.bodyLog = {}; persist(); renderAll(); });
+
+// 13) Krafttraining antippen → Journal-Flag + Wochenzähler
+await page.click('#trainChips .chip:has-text("Krafttraining")');
+(await page.evaluate(() => state.journal[today()].flags.kraft)) === true && /1× Kraft/.test(await page.textContent("#trainWeek"))
+  ? ok("Krafttraining geloggt, Wochenzähler 1×") : fail("Training");
+
+// 14) Wochen-Check: Vorschlag weicht ab → Banner → übernehmen
+const ci = await page.evaluate(() => { state.profile.lastCheckin = null; state.profile.kcalTarget = 3333; persist(); renderAll(); return checkinSuggestion(); });
+if (ci && await page.$("#ciApply")) { await page.click("#ciApply"); }
+ci && (await page.evaluate(() => state.profile.kcalTarget)) === ci.kcal && !(await page.$("#ciApply"))
+  ? ok(`Wochen-Check: ${ci.kcal} kcal vorgeschlagen und übernommen`) : fail("Check-in: " + JSON.stringify(ci));
+
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();
