@@ -1,4 +1,4 @@
-# FitTracker — Kontext für Coding-Agenten
+# MB FIT (Repo „fittracker“) — Kontext für Coding-Agenten
 
 Marcos persönliche Fitness-App: Ernährung, Supplements, Wasser, Gewicht, Progress-Fotos, Journal und
 Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptgerät, Sprache Deutsch.
@@ -31,6 +31,7 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 
 ## Design
+- App-Name: **MB FIT** (Marcos Wahl 23.11.2026). Interne Keys (`fittracker:db`, Worker-Name) bleiben unverändert — sonst sind Daten/Whoop-Login weg.
 - Markenwelt MB Capital: Gold `#D4AF37`, Dunkel `#080810`/`#0f0f1a`, Grün `#22c55e`, Rot `#ef4444`;
   Schriften Outfit (Text) + IBM Plex Mono (Zahlen), lokal in `fonts/` (kein Google-Fonts-Abruf).
 - Ein Blickfang: Kompass-Zifferblatt im Tagebuch (außen kcal, innen Eiweiß). Rest ruhig halten:

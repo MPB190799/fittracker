@@ -1,4 +1,4 @@
-// FitTracker — Whoop OAuth- & Daten-Proxy (Cloudflare Worker)
+// MB FIT (fittracker) — Whoop OAuth- & Daten-Proxy (Cloudflare Worker)
 // Hält das client_secret sicher, macht den OAuth-Token-Tausch + rotierenden Refresh,
 // speichert Tokens in KV (Single-User), liefert der PWA kompaktes JSON.
 // Endpunkte: /auth/start, /auth/callback, /status, /whoop/today, /whoop/history,
@@ -409,7 +409,7 @@ async function fetchJson(u, h) {
 
 function htmlMsg(title, env, ok) {
   const back = ok
-    ? `<a style="display:inline-block;margin-top:18px;background:#d4af37;color:#1a1a1a;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700" href="${env.APP_RETURN}?whoop=ok">Zurück zu FitTracker</a>`
+    ? `<a style="display:inline-block;margin-top:18px;background:#d4af37;color:#1a1a1a;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700" href="${env.APP_RETURN}?whoop=ok">Zurück zu MB FIT</a>`
     : `<a style="display:inline-block;margin-top:18px;color:#9aa3b2" href="${env.APP_RETURN}">Zurück</a>`;
   return new Response(
     `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">` +

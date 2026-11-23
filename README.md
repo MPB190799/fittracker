@@ -1,4 +1,4 @@
-# FitTracker
+# MB FIT (Repo: fittracker)
 
 Persönlicher Kalorien-, Makro-, Gewichts- & Progress-Foto-Tracker (MyFitnessPal-Style).
 Statische PWA auf GitHub Pages, kein Account. Deine Einträge bleiben in deinem Browser. Ein kleiner eigener Cloudflare-Worker (`whoop-worker/`) übernimmt Whoop, Online-Suche und Foto-Erkennung.

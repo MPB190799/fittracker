@@ -1,7 +1,7 @@
 {
-  "name": "FitTracker",
-  "short_name": "FitTracker",
-  "description": "Kalorien, Makros, Gewicht & Progress-Fotos",
+  "name": "MB FIT",
+  "short_name": "MB FIT",
+  "description": "Ernährung, Körper & Fortschritt an einem Ort",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v14 · Design · 2026-11-23";
+const APP_VERSION = "v14.1 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -794,7 +794,7 @@ on("#exportBtn", "click", async () => {
   const blob = new Blob([JSON.stringify({ v: 1, state, photos }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `fittracker-backup-${today()}.json`;
+  a.download = `mb-fit-backup-${today()}.json`;
   a.click();
 });
 on("#importBtn", "click", () => $("#importFile").click());
@@ -1227,7 +1227,7 @@ function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhoto
 try {
   $("#datePicker").value = selDate;
   { const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); }
-  const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
+  const vl = $("#verLine"); if (vl) vl.textContent = "MB FIT " + APP_VERSION;
   renderAll();
   maybeOnboard();
   // Whoop beim Start still im Hintergrund laden → „Heute · Körper“ im Tagebuch ist sofort aktuell
