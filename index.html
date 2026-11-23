@@ -37,6 +37,7 @@
 
     <!-- TAB: Tagebuch -->
     <section class="tabpage active" id="tab-diary">
+      <div class="card phase-banner" id="phaseBanner" style="display:none"></div>
       <div class="hero">
         <div class="dial" role="img" aria-label="Tagesziel: Kalorien und Eiweiß">
           <svg viewBox="0 0 200 200" class="dial-svg">
@@ -187,9 +188,11 @@
       <div class="card">
         <h2>Gewicht</h2>
         <canvas id="weightChart"></canvas>
+        <div id="compBox"></div>
         <p class="hint" id="goalProgress"></p>
         <div class="row" style="margin-top:12px">
-          <div class="field" style="margin:0"><label>An diesem Tag (kg)</label><input type="number" inputmode="decimal" step="0.1" id="weightInput" placeholder="z.B. 88.5" /></div>
+          <div class="field" style="margin:0"><label>Gewicht (kg)</label><input type="number" inputmode="decimal" step="0.1" id="weightInput" placeholder="kg" /></div>
+          <div class="field" style="margin:0"><label>Bauch (cm)</label><input type="number" inputmode="decimal" step="0.5" id="waistInput" placeholder="cm" /></div>
           <button class="primary" style="max-width:120px;align-self:flex-end" id="saveWeight">Speichern</button>
         </div>
         <div class="wlist" id="weightList"></div>
@@ -219,8 +222,18 @@
           <div class="field"><label>Geschlecht</label>
             <select id="pSex"><option value="m">Mann</option><option value="w">Frau</option></select>
           </div>
-          <div class="field"><label>Zielgewicht (kg)</label><input type="number" inputmode="decimal" step="0.5" id="pGoalW" placeholder="z.B. 90" /></div>
+          <div class="field"><label>Halsumfang (cm)</label><input type="number" inputmode="decimal" step="0.5" id="pNeck" placeholder="z.B. 42" /></div>
         </div>
+        <div class="row" id="hipRow" style="display:none">
+          <div class="field"><label>Hüftumfang (cm)</label><input type="number" inputmode="decimal" step="0.5" id="pHip" placeholder="z.B. 105" /></div>
+          <div class="field"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Körperfett-Ziel (%)</label><input type="number" inputmode="decimal" step="0.5" id="pGoalBf" placeholder="z.B. 15" /></div>
+          <div class="field"><label>Körperfett laut Waage (%)</label><input type="number" inputmode="decimal" step="0.1" id="pBfManual" placeholder="optional" /></div>
+        </div>
+        <p class="hint" style="margin-top:-4px" id="bfHint">Körperfett rechnet die App aus Bauch- und Halsumfang (US-Navy-Methode). Den Bauch misst du im Tab Gewicht mit — auf Höhe Bauchnabel, morgens, entspannt.</p>
+        <div class="field"><label>oder Zielgewicht (kg)</label><input type="number" inputmode="decimal" step="0.5" id="pGoalW" placeholder="nur falls kein Körperfett-Ziel" /></div>
         <div class="field"><label>Alltag &amp; Sport</label>
           <select id="pAct">
             <option value="1.2">Sitzender Job, kaum Sport</option>
@@ -242,6 +255,33 @@
           <div class="field"><label>Fett (g/Tag)</label><input type="number" inputmode="numeric" id="goalFat" /></div>
         </div>
         <button class="primary" id="saveGoals">Ziele speichern</button>
+      </div>
+      <div class="card" id="phaseCard">
+        <h2>Fasten &amp; Sonderphasen</h2>
+        <div id="phaseActive"></div>
+        <div id="phaseForm">
+          <div class="field"><label>Was möchtest du machen?</label>
+            <select id="phType">
+              <option value="soup">Suppenwoche (nur Suppen, kalorienarm)</option>
+              <option value="buchinger">Heilfasten nach Buchinger (Brühe, Saft, Tee)</option>
+              <option value="if16">Intervallfasten 16:8 (Essensfenster)</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="field"><label>Start</label><input type="date" id="phStart" /></div>
+            <div class="field"><label id="phDaysLbl">Dauer (Tage)</label><input type="number" inputmode="numeric" id="phDays" /></div>
+          </div>
+          <div class="row" id="phKcalRow">
+            <div class="field"><label>kcal pro Tag</label><input type="number" inputmode="numeric" id="phKcal" /></div>
+            <div class="field"></div>
+          </div>
+          <div class="row" id="phWinRow" style="display:none">
+            <div class="field"><label>Essen ab (Uhr)</label><input type="number" inputmode="numeric" id="phWinStart" min="0" max="23" /></div>
+            <div class="field"><label>Essen bis (Uhr)</label><input type="number" inputmode="numeric" id="phWinEnd" min="0" max="24" /></div>
+          </div>
+          <p class="hint" id="phInfo"></p>
+          <button class="primary" id="phStartBtn">Phase starten</button>
+        </div>
       </div>
       <div class="card">
         <h2>Echter Verbrauch (gemessen)</h2>

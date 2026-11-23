@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v17 · 2026-11-23";
+const APP_VERSION = "v18 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -114,7 +114,9 @@ const PORTIONS = [
 
 const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0,
-    heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null, goalMode: "rec" },
+    heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null, goalMode: "rec",
+    neckCm: null, hipCm: null, bfManual: null, goalBf: null },
+  phase: null, // { type: "soup"|"buchinger"|"if16", start, days, kcal, winStart, winEnd }
   entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {}, // { "2026-06-11": { suppId: true } }
@@ -152,7 +154,8 @@ function normalizeState(db) {
     templates: Array.isArray(db.templates) ? db.templates.filter(t => t && Array.isArray(t.items)) : [],
     journal: db.journal && typeof db.journal === "object" ? db.journal : {},
     bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {},
-    water: db.water && typeof db.water === "object" ? db.water : {}
+    water: db.water && typeof db.water === "object" ? db.water : {},
+    phase: db.phase && typeof db.phase === "object" && db.phase.start ? db.phase : null
   };
 }
 function load() {
@@ -181,7 +184,7 @@ async function idbDel(id) { const db = await idb(); return new Promise((res, rej
 function latestWeight() { return state.weights.length ? state.weights[state.weights.length - 1].kg : null; }
 // Eiweiß pro kg: bei deutlichem Übergewicht auf das ZIELgewicht beziehen (gängige Praxis) —
 // 2 g × 110 kg = 220 g wäre unnötig hoch. Ohne Zielgewicht wie bisher aufs aktuelle Gewicht.
-function proteinBaseKg() { const w = latestWeight(), g = Number(state.profile.goalWeight) || 0; return w && g && g < w ? g : w; }
+function proteinBaseKg() { const w = latestWeight(), g = goalW() || 0; return w && g && g < w ? g : w; }
 function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 function dayEntries() { return state.entries.filter(e => e.date === selDate); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -211,8 +214,9 @@ function countUp(id, to) {
 function renderSummary() {
   const es = dayEntries();
   const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat }), { kcal: 0, p: 0, c: 0, f: 0 });
-  const pT = proteinTarget();
-  const kT = state.profile.kcalTarget || 0;
+  const pinfo = phaseDayInfo(selDate);
+  const pT = pinfo && pinfo.fasting ? null : proteinTarget(); // an Fastentagen kein Eiweiß-Ziel
+  const kT = (pinfo && pinfo.kcal) || state.profile.kcalTarget || 0;
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
   // kcal-Ring (Mitte = übrig)
   const restK = Math.round(kT - sum.kcal);
@@ -223,7 +227,7 @@ function renderSummary() {
   // Eiweiß-Ring
   const restP = pT != null ? Math.round(pT - sum.p) : null;
   set("restProt", restP != null ? restP : "–");
-  set("protSub", pT != null ? Math.round(sum.p) + " / " + pT : "Gewicht?");
+  set("protSub", pT != null ? Math.round(sum.p) + " / " + pT : (pinfo && pinfo.fasting ? "Fastentag" : "Gewicht?"));
   setRing("ringProt", pT ? sum.p / pT : 0);
   const rp = $("#restProt"); if (rp) rp.classList.toggle("neg", restP != null && restP < 0);
   // KH/Fett-Balken
@@ -330,11 +334,121 @@ function renderTemplatesList() {
 // ---------- Körper & Ziel: Startwert per Formel (Mifflin-St Jeor) ----------
 // Grundumsatz = 10×kg + 6,25×cm − 5×Alter + 5 (Mann) bzw. −161 (Frau); × Aktivitätsfaktor = Verbrauch.
 // Defizit/Überschuss = Tempo (kg/Woche) × 7700 / 7. Nie unter den Grundumsatz und nie unter 1500/1200 kcal.
+
+// ---------- Fasten & Sonderphasen ----------
+// Suppenwoche: festes kcal-Ziel. Heilfasten (Buchinger): 1 Entlastungstag ≤ 1000 kcal, Fastentage
+// 250–500 kcal (Brühe/Saft/Tee), 2 Aufbautage. Intervallfasten 16:8: Essensfenster, kcal wie Plan.
+const PHASES = {
+  soup: { t: "Suppenwoche", days: 7, info: "Nur Suppen, kalorienarm. Tipp: Suppen mit Eiweiß (Linsen, Bohnen, Hähnchen) machen satt und schützen die Muskeln — dann schmilzt vor allem Fett." },
+  buchinger: { t: "Heilfasten", days: 5, info: "Fastentage mit Gemüsebrühe, verdünntem Saft und Tee (250–500 kcal), dazu viel trinken (2,5–3 Liter). Davor ein Entlastungstag, danach zwei Aufbautage — die App plant sie automatisch ein. Krankenkassen raten, Heilfasten vorher mit dem Arzt abzusprechen. Hinweis: Die Waage fällt beim Fasten schneller als das Fett — ein Teil ist Wasser und kommt zurück." },
+  if16: { t: "Intervallfasten 16:8", days: 30, info: "16 Stunden fasten, 8 Stunden essen. Die kcal bleiben wie in deinem Plan — die App zeigt dir im Tagebuch, ob dein Essensfenster gerade offen ist." }
+};
+function phaseLen(ph) { return ph.type === "buchinger" ? ph.days + 3 : ph.days; }
+function phaseEnd(ph) { return dayOffset(ph.start, phaseLen(ph) - 1); }
+function phaseActiveOn(date) { const ph = state.phase; return ph && date >= ph.start && date <= phaseEnd(ph) ? ph : null; }
+function phaseDayInfo(date) { // → { ph, n, len, kcal|null, fasting, label }
+  const ph = phaseActiveOn(date); if (!ph) return null;
+  const [a, b] = [ph.start, date].map(x => { const [y, m, d] = x.split("-").map(Number); return Date.UTC(y, m - 1, d); });
+  const n = Math.round((b - a) / 864e5) + 1, len = phaseLen(ph);
+  if (ph.type === "soup") return { ph, n, len, kcal: ph.kcal, fasting: false, label: `Suppenwoche · Tag ${n} von ${len}` };
+  if (ph.type === "if16") return { ph, n, len, kcal: null, fasting: false, label: `Intervallfasten 16:8 · Tag ${n} von ${len}` };
+  if (n === 1) return { ph, n, len, kcal: 1000, fasting: false, label: "Heilfasten · Entlastungstag (leicht essen, max. 1000 kcal)" };
+  if (n <= ph.days + 1) return { ph, n, len, kcal: ph.kcal || 500, fasting: true, label: `Heilfasten · Fastentag ${n - 1} von ${ph.days}` };
+  return { ph, n, len, kcal: n === len ? 1500 : 1000, fasting: false, label: `Heilfasten · Aufbautag ${n - ph.days - 1} von 2 (langsam wieder essen)` };
+}
+function ifStatus(ph) {
+  const now = new Date(), h = now.getHours() + now.getMinutes() / 60, a = Number(ph.winStart), b = Number(ph.winEnd);
+  const open = a < b ? h >= a && h < b : h >= a || h < b;
+  const until = open ? b : a;
+  let diff = until - h; if (diff < 0) diff += 24;
+  const hh = Math.floor(diff), mm = Math.round((diff - hh) * 60);
+  return { open, txt: open ? `Essensfenster offen — noch ${hh} h ${mm} min (bis ${b}:00)` : `Fastenzeit — noch ${hh} h ${mm} min bis ${a}:00` };
+}
+function renderPhaseBanner() {
+  const el = $("#phaseBanner"); if (!el) return;
+  const info = phaseDayInfo(selDate);
+  if (!info) { el.style.display = "none"; return; }
+  el.style.display = "block";
+  let sub = info.kcal ? `Heute: max. <b>${info.kcal} kcal</b>` : "";
+  if (info.ph.type === "if16" && selDate === today()) { const st = ifStatus(info.ph); sub = `<span style="color:${st.open ? "var(--green)" : "var(--gold)"}">${st.txt}</span>`; }
+  if (info.fasting) sub += " · nur Brühe, Saft, Tee — viel trinken";
+  el.innerHTML = `<div class="phase-t">${esc(info.label)}</div><div class="phase-s">${sub}</div>
+    <div class="phase-bar"><i style="width:${Math.round(info.n / info.len * 100)}%"></i></div>`;
+}
+function renderPhaseCard() {
+  const act = $("#phaseActive"), form = $("#phaseForm"); if (!act || !form) return;
+  const ph = state.phase;
+  if (ph && phaseEnd(ph) >= today()) {
+    form.style.display = "none";
+    act.innerHTML = `<p class="hint" style="margin-top:0"><b>${PHASES[ph.type].t}</b> läuft vom ${dateLabel(ph.start)} bis ${dateLabel(phaseEnd(ph))}${ph.type === "if16" ? ` · Essen ${ph.winStart}–${ph.winEnd} Uhr` : ""}.</p>
+      <button class="ghost" id="phStop" style="width:100%">Phase beenden</button>`;
+    $("#phStop").onclick = () => { if (confirm("Phase wirklich beenden?")) { state.phase = null; persist(); renderPhaseCard(); renderPhaseBanner(); renderSummary(); } };
+    return;
+  }
+  act.innerHTML = ""; form.style.display = "block";
+  const t = $("#phType").value || "soup";
+  if (!$("#phStart").value) $("#phStart").value = today();
+  syncPhaseForm(t, false);
+}
+function syncPhaseForm(t, reset) {
+  const P = PHASES[t];
+  if (reset || !$("#phDays").value) $("#phDays").value = P.days;
+  const floor = state.profile.sex === "w" ? 1200 : 1500;
+  if (reset || !$("#phKcal").value) $("#phKcal").value = t === "buchinger" ? 500 : floor;
+  $("#phDaysLbl").textContent = t === "buchinger" ? "Fastentage" : "Dauer (Tage)";
+  $("#phKcalRow").style.display = t === "if16" ? "none" : "flex";
+  $("#phWinRow").style.display = t === "if16" ? "flex" : "none";
+  if (!$("#phWinStart").value) $("#phWinStart").value = 12;
+  if (!$("#phWinEnd").value) $("#phWinEnd").value = 20;
+  $("#phInfo").textContent = P.info;
+}
+on("#phType", "change", (e) => syncPhaseForm(e.target.value, true));
+on("#phStartBtn", "click", () => {
+  const type = $("#phType").value, days = Math.round(Number($("#phDays").value));
+  const kcal = Math.round(Number($("#phKcal").value)) || null;
+  if (!(days >= 1 && days <= 60)) return alert("Dauer zwischen 1 und 60 Tagen eingeben.");
+  if (type === "buchinger" && days > 7 && !confirm("Mehr als 7 Fastentage solltest du nur mit ärztlicher Begleitung machen. Trotzdem planen?")) return;
+  if (type === "buchinger" && kcal && (kcal < 200 || kcal > 600)) return alert("Beim Heilfasten sind 250–500 kcal pro Fastentag üblich.");
+  state.phase = { type, start: $("#phStart").value || today(), days, kcal: type === "if16" ? null : kcal,
+    winStart: Math.round(Number($("#phWinStart").value)) || 12, winEnd: Math.round(Number($("#phWinEnd").value)) || 20 };
+  persist(); renderPhaseCard(); renderPhaseBanner(); renderSummary();
+});
+setInterval(() => { if (state.phase && state.phase.type === "if16") renderPhaseBanner(); }, 60000);
+
+// ---------- Körperfett (US-Navy-Methode) ----------
+// Mann: 495 / (1,0324 − 0,19077·log10(Bauch − Hals) + 0,15456·log10(Größe)) − 450
+// Frau: 495 / (1,29579 − 0,35004·log10(Bauch + Hüfte − Hals) + 0,22100·log10(Größe)) − 450   (alles in cm)
+function navyBf(waist, neck, hip, height, sex) {
+  if (!(waist > 0 && neck > 0 && height > 0)) return null;
+  const L = Math.log10;
+  let v;
+  if (sex === "w") { if (!(hip > 0) || waist + hip - neck <= 0) return null; v = 495 / (1.29579 - 0.35004 * L(waist + hip - neck) + 0.221 * L(height)) - 450; }
+  else { if (waist - neck <= 0) return null; v = 495 / (1.0324 - 0.19077 * L(waist - neck) + 0.15456 * L(height)) - 450; }
+  return v > 2 && v < 70 ? Math.round(v * 10) / 10 : null;
+}
+function latestWaist() { for (let i = state.weights.length - 1; i >= 0; i--) if (state.weights[i].waistCm) return state.weights[i]; return null; }
+function bodyComp() {
+  const w = latestWeight(); if (!w) return null;
+  const P = state.profile, lw = latestWaist();
+  let bf = lw ? navyBf(lw.waistCm, Number(P.neckCm), Number(P.hipCm), Number(P.heightCm), P.sex) : null, src = "Maßband";
+  if (bf == null && Number(P.bfManual) > 0) { bf = Number(P.bfManual); src = "Waage"; }
+  if (bf == null) return null;
+  const fatKg = Math.round(w * bf / 100 * 10) / 10;
+  return { bf, fatKg, leanKg: Math.round((w - fatKg) * 10) / 10, src, waist: lw && lw.waistCm };
+}
+// Zielgewicht: aus Körperfett-Ziel (fettfreie Masse bleibt gleich), sonst das eingetragene Zielgewicht
+function goalW() {
+  const P = state.profile, c = bodyComp(), gb = Number(P.goalBf);
+  if (c && gb > 2 && gb < 60) return Math.round(c.leanKg / (1 - gb / 100) * 10) / 10;
+  return Number(P.goalWeight) || null;
+}
+const fmtKg = (n) => (Math.round(n * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 // Stufen in % Körpergewicht pro Woche (Sporternährung: 0,5–1 %/Woche; NHS/NICE: max. ~1 kg/Woche)
 const CUT_MODES = { light: { t: "Leichter Cut", pct: 0.005 }, rec: { t: "Empfohlen", pct: 0.0075 }, hard: { t: "Krasser Cut", pct: 0.01 } };
 const BULK_MODES = { light: { t: "Leichter Aufbau", pct: 0.001 }, rec: { t: "Empfohlen", pct: 0.0025 }, hard: { t: "Zügiger Aufbau", pct: 0.005 } };
 function planDir() { // −1 abnehmen, +1 aufbauen, 0 halten
-  const w = latestWeight(), gw = Number(state.profile.goalWeight) || 0;
+  const w = latestWeight(), gw = goalW() || 0;
   if (!w || !gw || Math.abs(gw - w) < 0.5) return 0;
   return gw < w ? -1 : 1;
 }
@@ -355,7 +469,7 @@ function bodyPlan(modeOverride) {
   if (need.length) return { ok: false, need };
   const bmr = Math.round(10 * w + 6.25 * h - 5 * age + (P.sex === "w" ? -161 : 5));
   const tdee = Math.round(bmr * act);
-  const gw = Number(P.goalWeight) || null;
+  const gw = goalW();
   const rate = planRate(modeOverride);
   const warn = "";
   // Untergrenze: 1500 (Mann) / 1200 (Frau) kcal — übliche Grenze für Diäten ohne ärztliche Begleitung
@@ -376,24 +490,31 @@ function bodyPlan(modeOverride) {
   const fat = Math.round(Math.max(0.8 * protBase, kcal * 0.25 / 9));
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   const bmi = Math.round(w / ((h / 100) ** 2) * 10) / 10;
-  return { ok: true, w, age, bmr, tdee, kcal, floored, belowBmr, realRate, eta, protein, fat, carbs, gw, warn, bmi };
+  const comp = bodyComp(), gb = Number(P.goalBf) || null;
+  const fatToLose = comp && gw && gw < w ? Math.round((w - gw) * 10) / 10 : null; // bei KF-Ziel = reines Fett (fettfreie Masse bleibt)
+  const deficit = tdee - kcal; // kcal/Tag
+  return { ok: true, w, age, bmr, tdee, kcal, floored, belowBmr, realRate, eta, protein, fat, carbs, gw, warn, bmi, comp, gb, fatToLose, deficit };
 }
 function fillPlanInputs() {
   const P = state.profile, set = (id, v) => { const el = $("#" + id); if (el && document.activeElement !== el) el.value = v == null ? "" : v; };
   set("pHeight", P.heightCm); set("pBirth", P.birthYear); set("pSex", P.sex || "m");
   set("pAct", String(P.activity || 1.375)); set("pGoalW", P.goalWeight);
+  set("pNeck", P.neckCm); set("pHip", P.hipCm); set("pGoalBf", P.goalBf); set("pBfManual", P.bfManual);
+  const hr = $("#hipRow"); if (hr) hr.style.display = P.sex === "w" ? "flex" : "none";
+  const gwEl = $("#pGoalW"); if (gwEl) { const usesBf = Number(P.goalBf) > 0 && bodyComp(); gwEl.disabled = !!usesBf; gwEl.placeholder = usesBf ? "≈ " + fmtKg(goalW()) + " kg (aus Körperfett-Ziel)" : "nur falls kein Körperfett-Ziel"; }
+  const bh = $("#bfHint"); if (bh) { const c = bodyComp(); bh.innerHTML = c ? `Körperfett jetzt ≈ <b>${c.bf.toLocaleString("de-DE")} %</b> (${c.src === "Maßband" ? "aus Bauch " + c.waist + " cm und Hals" : "laut Waage"}). Bauch misst du im Tab Gewicht mit — Höhe Bauchnabel, morgens, entspannt.` : "Körperfett rechnet die App aus Bauch- und Halsumfang (US-Navy-Methode). Den Bauch misst du im Tab Gewicht mit — Höhe Bauchnabel, morgens, entspannt."; }
 }
 function renderModes() {
   const box = $("#planModes"), lbl = $("#modeLbl"); if (!box) return;
   const dir = planDir();
-  if (!dir) { box._html = ""; box.innerHTML = `<p class="hint" style="margin:0">Trag ein Zielgewicht ein — dann kannst du wählen, wie stark du abnehmen oder aufbauen willst. Ohne Ziel rechnet die App mit „Gewicht halten“.</p>`; if (lbl) lbl.textContent = "Wie stark?"; return; }
+  if (!dir) { box._html = ""; box.innerHTML = `<p class="hint" style="margin:0">Trag ein Körperfett-Ziel (oder Zielgewicht) ein — dann kannst du wählen, wie stark du cutten willst. Ohne Ziel rechnet die App mit „Gewicht halten“.</p>`; if (lbl) lbl.textContent = "Wie stark?"; return; }
   if (lbl) lbl.textContent = dir < 0 ? "Wie stark willst du cutten?" : "Wie schnell willst du aufbauen?";
   const modes = dir < 0 ? CUT_MODES : BULK_MODES, cur = state.profile.goalMode || "rec";
   const html = ["light", "rec", "hard"].map(k => {
     const p = bodyPlan(k), r = planRate(k);
     const kc = p.ok ? p.kcal + " kcal" : "–";
     return `<button type="button" class="mode${k === cur ? " on" : ""}${k === "rec" ? " rec" : ""}" data-mode="${k}">
-      <span class="mode-t">${modes[k].t}</span><span class="mode-k">${kc}</span><span class="mode-r">${r > 0 ? "+" : "−"}${Math.abs(r).toLocaleString("de-DE")} kg/Woche</span></button>`;
+      <span class="mode-t">${modes[k].t}</span><span class="mode-k">${kc}</span><span class="mode-r">${r > 0 ? "+" + Math.abs(r).toLocaleString("de-DE") + " kg/Woche" : "−" + Math.abs(r).toLocaleString("de-DE") + " kg Fett/Woche"}</span></button>`;
   }).join("");
   if (box._html !== html) { box.innerHTML = html; box._html = html; } // kein Neuzeichnen beim Antippen (siehe renderPlan)
   box.querySelectorAll(".mode").forEach(b => b.onclick = () => { state.profile.goalMode = b.dataset.mode; persist(); renderPlan(); renderAdaptive(); });
@@ -405,9 +526,13 @@ function renderPlan() {
   const r = bodyPlan();
   if (!r.ok) { box.innerHTML = `<p class="hint">Für deinen Vorschlag fehlt noch: <b>${r.need.join(", ")}</b>.</p>`; box._html = ""; return; }
   const fmt = (n) => Math.round(n).toLocaleString("de-DE");
-  const rateTxt = r.realRate === 0 ? "Gewicht halten" : (r.realRate > 0 ? "+" : "−") + Math.abs(r.realRate).toLocaleString("de-DE") + " kg pro Woche";
+  const fatG = Math.round(r.deficit / 7.7); // 1 kg Körperfett ≈ 7700 kcal → 1 g ≈ 7,7 kcal
+  const rateTxt = r.realRate === 0 ? "Gewicht halten" : r.realRate > 0 ? "+" + Math.abs(r.realRate).toLocaleString("de-DE") + " kg pro Woche"
+    : `≈ ${Math.abs(r.realRate).toLocaleString("de-DE")} kg Fett pro Woche · ${fmt(r.deficit)} kcal Defizit ≈ ${fatG} g Fett pro Tag`;
+  const compTxt = r.comp ? `<div class="comp-line"><span>Körperfett jetzt <b>${r.comp.bf.toLocaleString("de-DE")} %</b> · ${fmtKg(r.comp.fatKg)} kg Fett</span>${r.gb && r.fatToLose ? `<span>Ziel ${r.gb.toLocaleString("de-DE")} % → noch <b>${fmtKg(r.fatToLose)} kg Fett</b> weg (bei ≈ ${fmtKg(r.gw)} kg)</span>` : ""}</div>` : "";
   const html = `
-    <div class="plan-hero"><span class="plan-num">${r.kcal}</span><span class="plan-unit">kcal pro Tag darfst du essen</span><span class="plan-rate">${rateTxt}${r.eta ? ` · Ziel ${r.gw.toLocaleString("de-DE")} kg ca. ${r.eta.label} (${r.eta.weeks} Wochen)` : ""}</span></div>
+    <div class="plan-hero"><span class="plan-num">${r.kcal}</span><span class="plan-unit">kcal pro Tag darfst du essen</span><span class="plan-rate">${rateTxt}</span>${r.eta ? `<span class="plan-rate">Ziel erreicht ca. ${r.eta.label} (${r.eta.weeks} Wochen)</span>` : ""}</div>
+    ${compTxt}
     <div class="body-grid">
       <div class="bcard"><div class="bval">${r.protein}</div><div class="blbl">Eiweiß g</div></div>
       <div class="bcard"><div class="bval">${r.carbs}</div><div class="blbl">Kohlenh. g</div></div>
@@ -434,9 +559,32 @@ on("#pBirth", "change", (e) => savePlanField("birthYear", e.target.value, true))
 on("#pSex", "change", (e) => savePlanField("sex", e.target.value, false));
 on("#pAct", "change", (e) => savePlanField("activity", e.target.value, true));
 on("#pGoalW", "change", (e) => savePlanField("goalWeight", e.target.value, true));
+on("#pNeck", "change", (e) => savePlanField("neckCm", e.target.value, true));
+on("#pHip", "change", (e) => savePlanField("hipCm", e.target.value, true));
+on("#pGoalBf", "change", (e) => savePlanField("goalBf", e.target.value, true));
+on("#pBfManual", "change", (e) => savePlanField("bfManual", e.target.value, true));
+function renderComp() {
+  const box = $("#compBox"); if (!box) return;
+  const c = bodyComp();
+  if (!c) { box.innerHTML = `<p class="hint">Miss beim Wiegen auch den Bauch und trag im Tab Ziele deinen Halsumfang ein — dann siehst du hier dein Körperfett und wie viel davon schon weg ist.</p>`; return; }
+  // Fettverlust seit der ersten Messung mit Bauchumfang
+  const first = state.weights.find(x => x.waistCm), P = state.profile;
+  let lost = "";
+  if (first && first.id !== latestWaist().id) {
+    const bf0 = navyBf(first.waistCm, Number(P.neckCm), Number(P.hipCm), Number(P.heightCm), P.sex);
+    if (bf0 != null) { const d = Math.round((first.kg * bf0 / 100 - c.fatKg) * 10) / 10; lost = `<div class="bcard"><div class="bval" style="color:${d >= 0 ? "var(--green)" : "var(--red)"}">${d >= 0 ? "−" : "+"}${fmtKg(Math.abs(d))}</div><div class="blbl">kg Fett seit ${dateLabel(first.date)}</div></div>`; }
+  }
+  box.innerHTML = `<div class="body-grid comp-grid">
+    <div class="bcard"><div class="bval">${c.bf.toLocaleString("de-DE")}<small>%</small></div><div class="blbl">Körperfett</div></div>
+    <div class="bcard"><div class="bval">${fmtKg(c.fatKg)}</div><div class="blbl">kg Fett</div></div>
+    ${lost || `<div class="bcard"><div class="bval">${fmtKg(c.leanKg)}</div><div class="blbl">kg fettfrei</div></div>`}
+  </div>`;
+}
 function renderGoalProgress() {
+  renderComp();
   const el = $("#goalProgress"); if (!el) return;
-  const w = latestWeight(), gw = Number(state.profile.goalWeight) || 0;
+  const w = latestWeight(), gw = goalW() || 0, c = bodyComp(), gb = Number(state.profile.goalBf);
+  if (c && gb && gw && gw < w) { el.innerHTML = `Noch <b>${fmtKg(w - gw)} kg Fett</b> bis ${gb.toLocaleString("de-DE")} % Körperfett (≈ ${fmtKg(gw)} kg).`; return; }
   if (!w || !gw) { el.textContent = ""; return; }
   const diff = Math.round((w - gw) * 10) / 10;
   el.innerHTML = diff === 0 ? "Zielgewicht erreicht." : `Noch <b>${Math.abs(diff).toLocaleString("de-DE")} kg</b> bis zu deinem Ziel von ${gw.toLocaleString("de-DE")} kg.`;
@@ -456,7 +604,8 @@ function adaptiveEstimate() {
   const dnum = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
   // Tage mit realistisch vollständigem Log (≥ 800 kcal) — heute nicht, der läuft noch
   const byDay = {};
-  for (const e of state.entries) if (e.date >= start && e.date < end) byDay[e.date] = (byDay[e.date] || 0) + e.kcal;
+  // Phasentage (Fasten/Suppe) zählen nicht: Wasserverlust würde den Verbrauch verfälschen
+  for (const e of state.entries) if (e.date >= start && e.date < end && !phaseActiveOn(e.date)) byDay[e.date] = (byDay[e.date] || 0) + e.kcal;
   const days = Object.values(byDay).filter(k => k >= 800);
   const ws = state.weights.filter(w => w.date >= start && w.date <= end);
   const need = [];
@@ -812,10 +961,13 @@ on("#sheetBg", "click", () => showSheet("food", false));
 
 // ---------- weight ----------
 on("#saveWeight", "click", () => {
-  const kg = Number($("#weightInput").value);
-  if (!kg) return alert("Gewicht eingeben.");
+  const kg = Number(String($("#weightInput").value).replace(",", "."));
+  const waist = Number(String(($("#waistInput") || {}).value || "").replace(",", ".")) || null;
+  const ex = state.weights.find(w => w.date === selDate);
+  if (!kg && !(waist && ex)) return alert(waist ? "Für den Tag gibt es noch kein Gewicht — bitte Gewicht mit eintragen." : "Gewicht eingeben.");
   state.weights = state.weights.filter(w => w.date !== selDate);
-  state.weights.push({ id: uid(), date: selDate, kg });
+  state.weights.push({ id: uid(), date: selDate, kg: kg || ex.kg, waistCm: waist || (ex && ex.waistCm) || null });
+  const wi = $("#waistInput"); if (wi) wi.value = "";
   state.weights.sort((a, b) => a.date.localeCompare(b.date));
   persist(); $("#weightInput").value = ""; renderWeight(); renderSummary(); fillGoals(); renderPlan(); renderGoalProgress();
 });
@@ -824,8 +976,8 @@ function renderWeight() {
   [...state.weights].reverse().forEach(w => {
     const row = document.createElement("div");
     row.className = "entry";
-    row.innerHTML = `<div class="info"><div class="nm">${esc(dateLabel(w.date))}</div></div><div class="kc">${(Math.round(w.kg * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 })} kg</div><button class="x" aria-label="Eintrag löschen">✕</button>`;
-    row.querySelector(".x").onclick = () => { state.weights = state.weights.filter(x => x.id !== w.id); persist(); renderWeight(); renderSummary(); fillGoals(); };
+    row.innerHTML = `<div class="info"><div class="nm">${esc(dateLabel(w.date))}</div>${w.waistCm ? `<div class="sub">Bauch ${String(w.waistCm).replace(".", ",")} cm</div>` : ""}</div><div class="kc">${(Math.round(w.kg * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 })} kg</div><button class="x" aria-label="Eintrag löschen">✕</button>`;
+    row.querySelector(".x").onclick = () => { state.weights = state.weights.filter(x => x.id !== w.id); persist(); renderWeight(); renderSummary(); fillGoals(); renderGoalProgress(); };
     list.appendChild(row);
   });
   drawWeightChart();
@@ -837,7 +989,7 @@ function drawWeightChart() {
   const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
   const pts = state.weights.slice(-30);
   if (pts.length < 2) { ctx.fillStyle = "#8c8aa0"; ctx.font = "14px Outfit, sans-serif"; ctx.fillText("Ab 2 Einträgen erscheint hier dein Verlauf.", 4, 80); return; }
-  const gw = Number(state.profile.goalWeight) || 0;
+  const gw = goalW() || 0;
   const ys = pts.map(p => p.kg); let min = Math.min(...ys), max = Math.max(...ys);
   // Zielgewicht einblenden, wenn es nicht absurd weit weg ist (sonst wird die Kurve flach)
   const showGoal = gw && Math.abs(gw - (gw < min ? min : max)) <= Math.max(6, (max - min) * 2);
@@ -979,7 +1131,7 @@ function dateLabel(ds) {
   const [y, m, d] = ds.split("-").map(Number), dt = new Date(y, m - 1, d);
   return WD[dt.getDay()] + ", " + d + ". " + MON[m - 1] + (y !== new Date().getFullYear() ? " " + y : "");
 }
-function refreshDate() { $("#datePicker").value = selDate; const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); renderDiary(); renderSupps(); renderJournal(); }
+function refreshDate() { $("#datePicker").value = selDate; const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); renderDiary(); renderSupps(); renderJournal(); renderPhaseBanner(); }
 
 // ---------- FAB (schnell hinzufügen) ----------
 on("#fab", "click", () => {
@@ -1316,7 +1468,18 @@ function renderWeekReport() {
     cell(daysLogged + "/7", "Tage geloggt", "Essen") +
     cell(pT ? proteinHits + "/" + daysLogged : null, "Eiweiß-Ziel", "Tage erreicht") +
     cell(avg(recs) != null ? avg(recs) + "%" : null, "Ø Recovery", recs.length ? recs.length + " Tage" : "") +
-    cell(avg1(sleeps) != null ? avg1(sleeps) + " h" : null, "Ø Schlaf", "");
+    cell(avg1(sleeps) != null ? avg1(sleeps) + " h" : null, "Ø Schlaf", "") + weekFatCell(days);
+}
+
+// Fett-Bilanz der Woche: Σ(Verbrauch − gegessen) / 7700 — Verbrauch gemessen (falls genug Daten), sonst Formel
+function tdeeRef() { const a = adaptiveEstimate(); if (a.ok) return a.tdee; const p = bodyPlan(); return p.ok ? p.tdee : null; }
+function weekFatCell(days) {
+  const t = tdeeRef(); if (!t) return "";
+  let bal = 0, n = 0;
+  for (const d of days) { if (d === today()) continue; const k = state.entries.filter(e => e.date === d).reduce((a, e) => a + e.kcal, 0); if (k >= 300) { bal += t - k; n++; } }
+  if (!n) return "";
+  const kg = bal / 7700;
+  return `<div class="bcard"><div class="bval" style="color:${kg >= 0 ? "var(--green)" : "var(--red)"}">${kg >= 0 ? "−" : "+"}${fmtKg(Math.abs(kg))}</div><div class="blbl">kg Fett</div><div class="bsub">rechnerisch, ${n} Tage</div></div>`;
 }
 
 // ---------- Supplement → Recovery am Folgetag ----------
@@ -1363,7 +1526,8 @@ function renderSuppInsights() {
 })();
 
 // ---------- boot ----------
-function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); renderGoalProgress(); }
+function renderAll() { renderPhaseBanner(); renderPhaseCard(); renderAll0(); }
+function renderAll0() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); renderGoalProgress(); }
 try {
   $("#datePicker").value = selDate;
   { const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); }

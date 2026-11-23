@@ -330,3 +330,16 @@ nav.tabs button.active::before { content: ""; position: absolute; top: -9px; wid
 .mode.rec::after { content: "Empfehlung"; position: absolute; top: -8px; font-size: 10px; font-weight: 600; color: var(--ink); background: var(--metal); border-radius: 999px; padding: 1px 7px; }
 .mode.on { border-color: var(--gold); background: linear-gradient(180deg, rgba(212,175,55,.16) 0%, rgba(212,175,55,.06) 100%); box-shadow: 0 0 18px -6px rgba(212, 175, 55, .6); }
 .mode.on .mode-k { color: var(--gold-hi); }
+
+/* Körperfett & Phasen */
+.comp-line { display: flex; flex-direction: column; gap: 4px; align-items: center; font-size: 13px; color: var(--muted); margin: -4px 0 14px; text-align: center; }
+.comp-line b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+.comp-grid { margin: 12px 0 4px; }
+.bval small { font-size: 13px; color: var(--muted); margin-left: 2px; }
+.phase-banner { border-color: rgba(212, 175, 55, .35); background: linear-gradient(180deg, rgba(212,175,55,.10) 0%, rgba(212,175,55,.03) 100%); padding: 14px 16px; }
+.phase-t { font-weight: 600; font-size: 15px; }
+.phase-s { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.phase-s b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+.phase-bar { height: 3px; border-radius: 2px; background: #1b1b2c; margin-top: 10px; overflow: hidden; }
+.phase-bar i { display: block; height: 100%; background: var(--metal); }
+.field input:disabled { opacity: .55; }

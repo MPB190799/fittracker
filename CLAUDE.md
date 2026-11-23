@@ -30,6 +30,12 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Körper & Ziel (`bodyPlan`): Mifflin-St Jeor × Aktivitätsfaktor ± Tempo×7700/7. Tempo aus Zielgewicht-Richtung +
   Stufe (`CUT_MODES`/`BULK_MODES`, % Körpergewicht/Woche; Cut max. 1 kg/Woche). Untergrenze 1500 (Mann)/1200 (Frau)
   kcal; unter Grundumsatz nur Hinweis. Eiweiß bei Abnehmziel auf Zielgewicht bezogen.
+- Ziel ist FETTabbau: Körperfett per US-Navy-Formel (`navyBf`, Bauch aus Gewicht-Eintrag `waistCm` + Hals im Profil)
+  oder Waagenwert (`bfManual`). Körperfett-Ziel → Zielgewicht über fettfreie Masse (`goalW`). Anzeigen in kg Fett
+  (1 kg Körperfett ≈ 7700 kcal).
+- Sonderphasen (`state.phase`): Suppenwoche (kcal fix), Heilfasten Buchinger (1 Entlastungstag ≤1000, Fastentage
+  250–500, 2 Aufbautage; >7 Tage nur mit Arzt-Hinweis), Intervallfasten 16:8 (Essensfenster). Phasentage zählen
+  nicht in die Verbrauchsmessung (`adaptiveEstimate`).
 - Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
   Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 

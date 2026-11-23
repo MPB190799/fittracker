@@ -115,5 +115,31 @@ const plan2 = await page.textContent("#planBox");
 const num2 = +(plan2.match(/([\d.]+)\s*kcal pro Tag/) || [])[1]?.replace(".", "");
 num2 >= 1500 ? ok(`Untergrenze gehalten (${num2} kcal ≥ 1500)`) : fail("unter 1500: " + num2);
 
+// 9) Körperfett (US-Navy): Quelle-Beispiel Bauch 102,1 / Hals 38,6 / 182,88 cm → 26,8 %
+const navy = await page.evaluate(() => navyBf(102.1, 38.6, null, 182.88, "m"));
+navy === 26.8 ? ok("US-Navy-Formel: 26,8 % (wie Referenz)") : fail("Navy: " + navy);
+// Körperfett-Ziel → Zielgewicht aus fettfreier Masse, Anzeige in kg Fett
+await page.click('nav.tabs button[data-tab="weight"]');
+await page.fill("#weightInput", "110"); await page.fill("#waistInput", "118"); await page.click("#saveWeight");
+await page.click('nav.tabs button[data-tab="goals"]');
+await page.fill("#pNeck", "42"); await page.dispatchEvent("#pNeck", "change");
+await page.fill("#pGoalBf", "15"); await page.dispatchEvent("#pGoalBf", "change");
+const comp = await page.evaluate(() => ({ c: bodyComp(), g: goalW() }));
+const expG = Math.round(comp.c.leanKg / 0.85 * 10) / 10;
+comp.c && Math.abs(comp.g - expG) < 0.11 ? ok(`KF ${comp.c.bf} %, ${comp.c.fatKg} kg Fett → Ziel 15 % bei ≈ ${comp.g} kg`) : fail("KF-Ziel: " + JSON.stringify(comp));
+const pt = await page.textContent("#planBox"), md = await page.textContent("#planModes");
+/kg Fett pro Woche/.test(pt) && /noch [\d,]+ kg Fett/.test(pt) && /kg Fett\/Woche/.test(md) ? ok("Plan & Stufen zeigen Fett-Einheiten") : fail("Fett-Anzeige: " + pt.slice(0, 200));
+
+// 10) Sonderphasen: Suppenwoche 1500 kcal; Heilfasten Tag 2 = Fastentag 500 kcal ohne Eiweiß-Ziel
+await page.selectOption("#phType", "soup"); await page.fill("#phKcal", "1500"); await page.click("#phStartBtn");
+await page.click('nav.tabs button[data-tab="diary"]');
+(await page.textContent("#kcalSub")).trim().endsWith("/ 1500") && /Suppenwoche · Tag 1 von 7/.test(await page.textContent("#phaseBanner"))
+  ? ok("Suppenwoche: Tagesziel 1500 kcal + Banner") : fail("Suppe: " + await page.textContent("#kcalSub"));
+await page.evaluate(() => { state.phase = { type: "buchinger", start: dayOffset(today(), -1), days: 5, kcal: 500 }; persist(); renderAll(); });
+(await page.textContent("#kcalSub")).trim().endsWith("/ 500") && (await page.textContent("#protSub")).includes("Fastentag")
+  ? ok("Heilfasten: Fastentag 500 kcal, kein Eiweiß-Ziel") : fail("Buchinger: " + await page.textContent("#kcalSub") + " | " + await page.textContent("#protSub"));
+await page.evaluate(() => { state.phase = { type: "buchinger", start: dayOffset(today(), -6), days: 5, kcal: 500 }; persist(); renderAll(); });
+/Aufbautag 1 von 2/.test(await page.textContent("#phaseBanner")) ? ok("Heilfasten: Aufbautage automatisch geplant") : fail("Aufbau: " + await page.textContent("#phaseBanner"));
+
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();
