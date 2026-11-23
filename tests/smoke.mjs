@@ -202,5 +202,23 @@ await page.evaluate(() => renderInsights());
 const ins = await page.textContent("#insights");
 /Tut dir gut[\s\S]*Gelesen[\s\S]*Schlaf \+16 %/.test(ins) ? ok("Auswertung: Lesen → Schlaf +16 % in der Nacht danach") : fail("Insights: " + ins.slice(0, 220));
 
+// 18) Foto-Prüfliste: 3 Zutaten erkannt → Mais raus, Reis +1 Schritt → übernehmen
+await page.route("**/vision/food", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, model: "test",
+  items: [ { name: "Reis", grams: 200, kcal: 260, protein: 5, carbs: 56, fat: 1, fiber: 1, sugar: 0, confidence: 0.9 },
+           { name: "Hähnchen", grams: 150, kcal: 248, protein: 46, carbs: 0, fat: 5, confidence: 0.85 },
+           { name: "Mais", grams: 50, kcal: 43, protein: 1.6, carbs: 9.5, fat: 0.6, confidence: 0.4 } ], note: "" }) }));
+await page.evaluate(() => { localStorage.setItem("fittracker:whoopkey", "test"); state.entries = state.entries.filter(e => e.date !== today()); persist(); renderAll(); });
+await page.click('nav.tabs button[data-tab="diary"]'); await page.click("#fab");
+await page.setInputFiles("#foodPhotoInput", new URL("./meal.jpg", import.meta.url).pathname);
+await page.waitForSelector(".vrow");
+await page.click('.vrow:has(input[value="Mais"]) .vdel');
+await page.click('.vrow:has(input[value="Reis"]) .vplus');
+const btn = await page.textContent("#visionAddAll");
+await page.click("#visionAddAll");
+const ve = await page.evaluate(() => state.entries.filter(e => e.date === today()).map(e => [e.name, e.grams, e.kcal]));
+const reis = ve.find(x => x[0] === "Reis");
+ve.length === 2 && reis && reis[1] === 250 && reis[2] === 325 && /573 kcal/.test(btn)
+  ? ok("Foto-Prüfliste: Mais entfernt, Reis 250 g / 325 kcal, 2 Einträge übernommen") : fail("Prüfliste: " + JSON.stringify(ve) + " | " + btn);
+
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();

@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v21 · 2026-11-23";
+const APP_VERSION = "v22 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -1546,26 +1546,55 @@ on("#foodPhotoInput", "change", async (e) => {
     box.innerHTML = `<div class="vision-msg err">Server nicht erreichbar (offline?) — manuell eintragen.</div>`;
   }
 });
+// Prüf-Liste nach dem Foto: jede Zutat einzeln entfernen, Menge ändern (Werte rechnen mit), Namen korrigieren,
+// dann alles auf einmal übernehmen. Werte werden pro Gramm aus der KI-Schätzung hochgerechnet.
+let visionItems = [];
+const VKEYS = ["kcal", "protein", "carbs", "fat", "fiber", "sugar"];
 function renderVision(d) {
   const box = $("#visionBox"); if (!box) return;
   if (!d.items || !d.items.length) {
     box.innerHTML = `<div class="vision-msg">Kein Essen erkannt${d.note ? " — " + esc(d.note) : ""}. Klareres Foto versuchen oder manuell eintragen.</div>`;
     return;
   }
-  let html = `<div class="vision-head">🍽️ Erkannt — antippen zum Übernehmen (alles bleibt editierbar):</div>`;
-  d.items.forEach((it, i) => {
-    const conf = it.confidence != null ? Math.round(it.confidence * 100) : null;
-    html += `<div class="vision-item" data-i="${i}">
-      <div class="vinfo"><div class="nm">${esc(it.name)}</div>
-      <div class="sub">${Math.round(it.grams)} g · ${Math.round(it.kcal)} kcal · ${round1(it.protein)}P / ${round1(it.carbs)}K / ${round1(it.fat)}F${conf != null ? ` · ${conf}% sicher` : ""}</div></div>
-      <button class="vadd" data-i="${i}">+ Eintrag</button></div>`;
+  visionItems = d.items.map(it => {
+    const g0 = Math.max(1, Math.round(it.grams) || 100), perG = {};
+    for (const k of VKEYS) perG[k] = it[k] != null ? it[k] / g0 : null;
+    return { name: it.name, g0, grams: g0, perG, conf: it.confidence };
   });
-  if (d.note) html += `<div class="vision-msg">ℹ️ ${esc(d.note)}</div>`;
-  if (d.items.length > 1) html += `<button class="ghost" id="visionAddAll" style="width:100%;margin-top:8px">Alle ${d.items.length} direkt hinzufügen</button>`;
+  box._note = d.note || "";
+  drawVisionList();
+}
+function vVal(it, k) { return it.perG[k] == null ? null : it.perG[k] * it.grams; }
+function drawVisionList() {
+  const box = $("#visionBox"); if (!box) return;
+  if (!visionItems.length) { box.innerHTML = `<div class="vision-msg">Alles entfernt — Foto neu machen oder unten manuell eintragen.</div>`; return; }
+  const tot = visionItems.reduce((a, it) => a + (vVal(it, "kcal") || 0), 0);
+  let html = `<div class="vision-head">Erkannt — prüfen, Mengen anpassen, Falsches mit ✕ entfernen:</div>`;
+  visionItems.forEach((it, i) => {
+    const conf = it.conf != null ? Math.round(it.conf * 100) : null;
+    html += `<div class="vrow" data-i="${i}">
+      <div class="vrow-top"><input class="vname" value="${esc(it.name)}" aria-label="Name" /><button class="vdel" aria-label="${esc(it.name)} entfernen">✕</button></div>
+      <div class="vrow-bot">
+        <div class="vqty"><button class="vminus" aria-label="weniger">−</button><input class="vg" type="number" inputmode="numeric" value="${Math.round(it.grams)}" aria-label="Menge in Gramm" /><span>g</span><button class="vplus" aria-label="mehr">+</button></div>
+        <div class="vmac"><b>${Math.round(vVal(it, "kcal"))}</b> kcal · ${round1(vVal(it, "protein"))} P${conf != null && conf < 60 ? ` · <span class="vunsure">unsicher</span>` : ""}</div>
+      </div></div>`;
+  });
+  if (box._note) html += `<div class="vision-msg">${esc(box._note)}</div>`;
+  html += `<button class="primary" id="visionAddAll" style="margin-top:6px">${visionItems.length > 1 ? `Alle ${visionItems.length} übernehmen` : "Übernehmen"} · ${Math.round(tot)} kcal</button>
+    <p class="hint" style="text-align:center">Fehlt eine Zutat? Nach dem Übernehmen einfach über Suche oder Barcode ergänzen.</p>`;
   box.innerHTML = html;
-  box.querySelectorAll(".vadd").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); fillFromVision(d.items[+b.dataset.i]); });
-  box.querySelectorAll(".vision-item .vinfo").forEach(el => el.onclick = () => fillFromVision(d.items[+el.parentElement.dataset.i]));
-  const all = $("#visionAddAll"); if (all) all.onclick = () => addVisionAll(d.items);
+  box.querySelectorAll(".vrow").forEach(row => {
+    const i = +row.dataset.i, it = visionItems[i];
+    const step = Math.max(5, Math.round(it.g0 * 0.25 / 5) * 5); // 25 % der geschätzten Menge, auf 5 g gerundet
+    row.querySelector(".vdel").onclick = () => { visionItems.splice(i, 1); drawVisionList(); };
+    row.querySelector(".vminus").onclick = () => { it.grams = Math.max(0, it.grams - step); drawVisionList(); };
+    row.querySelector(".vplus").onclick = () => { it.grams += step; drawVisionList(); };
+    row.querySelector(".vg").onchange = (e) => { it.grams = Math.max(0, Number(e.target.value) || 0); drawVisionList(); };
+    row.querySelector(".vname").oninput = (e) => { it.name = e.target.value; };
+  });
+  $("#visionAddAll").onclick = () => addVisionAll(visionItems.filter(it => it.grams > 0 && it.name.trim()).map(it => {
+    const o = { name: it.name.trim(), grams: it.grams }; for (const k of VKEYS) o[k] = vVal(it, k); return o;
+  }));
 }
 function fillFromVision(it) {
   per100 = it.grams > 0 ? { kcal: it.kcal / it.grams * 100, protein: it.protein / it.grams * 100, carbs: it.carbs / it.grams * 100, fat: it.fat / it.grams * 100,
