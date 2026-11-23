@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v23 · 2026-11-23";
+const APP_VERSION = "v24 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -481,6 +481,11 @@ function renderNudges() {
   if (c) html += `<div class="card nudge"><div class="nudge-t">Wochen-Check</div>
     <div class="nudge-s">Neues Tagesziel <b>${c.kcal} kcal</b> statt ${state.profile.kcalTarget} — ${c.why}.</div>
     <div class="row nudge-b"><button class="primary" id="ciApply">Übernehmen</button><button class="ghost" id="ciLater">Später</button></div></div>`;
+  const lastPh = state.photos.reduce((m, p) => p.date > m ? p.date : m, "");
+  if ((lastPh && lastPh <= dayOffset(today(), -21)) || (!lastPh && planDir() < 0 && state.entries.length > 20))
+    html += `<div class="card nudge"><div class="nudge-t">Zeit für Fortschrittsfotos</div>
+      <div class="nudge-s">${lastPh ? "Letzte Fotos: " + dateLabel(lastPh) : "Noch keine Fotos"} — alle 3 Wochen zeigen dir, was die Waage nicht zeigt.</div>
+      <div class="row nudge-b"><button class="primary" id="phNow">Fotos machen</button></div></div>`;
   const lb = lastBackup(), hasData = state.entries.length + state.weights.length > 0;
   if (hasData && (!lb || lb <= dayOffset(today(), -7))) html += `<div class="card nudge"><div class="nudge-t">Backup fällig</div>
     <div class="nudge-s">${lb ? "Letztes Backup: " + dateLabel(lb) : "Du hast noch kein Backup"} — sichere deine Daten in OneDrive.</div>
@@ -489,6 +494,7 @@ function renderNudges() {
   const ap = $("#ciApply"); if (ap) ap.onclick = () => { state.profile.kcalTarget = c.kcal; state.profile.lastCheckin = today(); persist(); fillGoals(); renderDiary(); renderNudges(); };
   const lt = $("#ciLater"); if (lt) lt.onclick = () => { state.profile.lastCheckin = today(); persist(); renderNudges(); };
   const bk = $("#bkNow"); if (bk) bk.onclick = doBackup;
+  const pn = $("#phNow"); if (pn) pn.onclick = () => switchTab("photos");
 }
 
 // ---------- Fasten & Sonderphasen ----------
@@ -587,6 +593,7 @@ function bodyComp() {
   const w = latestWeight(); if (!w) return null;
   const P = state.profile, lw = latestWaist();
   let bf = lw ? navyBf(lw.waistCm, Number(P.neckCm), Number(P.hipCm), Number(P.heightCm), P.sex) : null, src = "Maßband";
+  if (bf == null) { for (let i = state.weights.length - 1; i >= 0; i--) if (state.weights[i].bfScale) { bf = state.weights[i].bfScale; src = "Waage"; break; } }
   if (bf == null && Number(P.bfManual) > 0) { bf = Number(P.bfManual); src = "Waage"; }
   if (bf == null) return null;
   const fatKg = Math.round(w * bf / 100 * 10) / 10;
@@ -1136,11 +1143,12 @@ on("#sheetBg", "click", () => showSheet("food", false));
 on("#saveWeight", "click", () => {
   const kg = Number(String($("#weightInput").value).replace(",", "."));
   const waist = Number(String(($("#waistInput") || {}).value || "").replace(",", ".")) || null;
+  const bfScale = Number(String(($("#bfScaleInput") || {}).value || "").replace(",", ".")) || null;
   const ex = state.weights.find(w => w.date === selDate);
-  if (!kg && !(waist && ex)) return alert(waist ? "Für den Tag gibt es noch kein Gewicht — bitte Gewicht mit eintragen." : "Gewicht eingeben.");
+  if (!kg && !((waist || bfScale) && ex)) return alert(waist ? "Für den Tag gibt es noch kein Gewicht — bitte Gewicht mit eintragen." : "Gewicht eingeben.");
   state.weights = state.weights.filter(w => w.date !== selDate);
-  state.weights.push({ id: uid(), date: selDate, kg: kg || ex.kg, waistCm: waist || (ex && ex.waistCm) || null });
-  const wi = $("#waistInput"); if (wi) wi.value = "";
+  state.weights.push({ id: uid(), date: selDate, kg: kg || ex.kg, waistCm: waist || (ex && ex.waistCm) || null, bfScale: bfScale || (ex && ex.bfScale) || null });
+  for (const id of ["waistInput", "bfScaleInput"]) { const el = $("#" + id); if (el) el.value = ""; }
   state.weights.sort((a, b) => a.date.localeCompare(b.date));
   persist(); $("#weightInput").value = ""; renderWeight(); renderSummary(); fillGoals(); renderPlan(); renderGoalProgress();
 });
@@ -1149,7 +1157,7 @@ function renderWeight() {
   [...state.weights].reverse().forEach(w => {
     const row = document.createElement("div");
     row.className = "entry";
-    row.innerHTML = `<div class="info"><div class="nm">${esc(dateLabel(w.date))}</div>${w.waistCm ? `<div class="sub">Bauch ${String(w.waistCm).replace(".", ",")} cm</div>` : ""}</div><div class="kc">${(Math.round(w.kg * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 })} kg</div><button class="x" aria-label="Eintrag löschen">✕</button>`;
+    row.innerHTML = `<div class="info"><div class="nm">${esc(dateLabel(w.date))}</div>${w.waistCm || w.bfScale ? `<div class="sub">${[w.waistCm ? "Bauch " + String(w.waistCm).replace(".", ",") + " cm" : "", w.bfScale ? "Waage " + String(w.bfScale).replace(".", ",") + " % KF" : ""].filter(Boolean).join(" · ")}</div>` : ""}</div><div class="kc">${(Math.round(w.kg * 10) / 10).toLocaleString("de-DE", { minimumFractionDigits: 1 })} kg</div><button class="x" aria-label="Eintrag löschen">✕</button>`;
     row.querySelector(".x").onclick = () => { state.weights = state.weights.filter(x => x.id !== w.id); persist(); renderWeight(); renderSummary(); fillGoals(); renderGoalProgress(); };
     list.appendChild(row);
   });
@@ -1187,19 +1195,58 @@ function drawWeightChart() {
   ctx.fillStyle = "#8c8aa0"; ctx.font = "11px 'IBM Plex Mono', monospace"; ctx.fillText(max.toFixed(1), 2, gy(max) - 6); ctx.fillText(min.toFixed(1), 2, gy(min) + 14);
 }
 
-// ---------- photos ----------
-on("#addPhoto", "click", () => $("#photoInput").click());
+// ---------- Fortschrittsfotos: Posen, Kamera mit Vorlage, Vorher/Nachher, KI-Vergleich ----------
+const POSES = { front: "Bauch vorne", side: "Seite", back: "Rücken", shoulder: "Schultern", other: "Sonstige" };
+let curPose = "front";
+const posePhotos = (pose) => state.photos.filter(p => (p.pose || "other") === pose).sort((a, b) => a.date.localeCompare(b.date));
+async function savePhoto(dataUrl) {
+  const id = uid();
+  await idbPut(id, dataUrl);
+  state.photos.push({ id, date: selDate, pose: curPose, note: "" });
+  state.photos.sort((a, b) => a.date.localeCompare(b.date));
+  persist(); renderPhotos(); renderNudges();
+}
+on("#pickBtn", "click", () => $("#photoInput").click());
 on("#photoInput", "change", async (e) => {
   const file = e.target.files[0]; if (!file) return;
-  try {
-    const dataUrl = await resizeImage(file, 1280, 0.82);
-    const id = uid();
-    await idbPut(id, dataUrl);
-    state.photos.push({ id, date: selDate, note: "" });
-    state.photos.sort((a, b) => a.date.localeCompare(b.date));
-    persist(); e.target.value = ""; switchTab("photos"); renderPhotos();
-  } catch (err) { alert("Foto konnte nicht gespeichert werden."); }
+  try { await savePhoto(await resizeImage(file, 1280, 0.82)); } catch (err) { alert("Foto konnte nicht gespeichert werden."); }
+  e.target.value = "";
 });
+// Eigene Kamera-Ansicht: letztes Foto derselben Pose halbtransparent darüber → gleicher Abstand, gleiche Haltung.
+let camStream = null, camFacing = "user", camTimer = 5, ghostOn = true;
+async function openCam() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("#photoInput").click(); return; }
+  try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false }); }
+  catch { alert("Kamera nicht verfügbar — in den iPhone-Einstellungen Safari → Kamera erlauben, oder „Galerie“ nutzen."); return; }
+  const v = $("#camVideo"); v.srcObject = camStream; v.classList.toggle("mirror", camFacing === "user");
+  const last = posePhotos(curPose).pop(), g = $("#camGhost");
+  g.removeAttribute("src"); g.style.display = "none";
+  if (last) { const url = await idbGet(last.id); if (url) { g.src = url; g.style.display = ghostOn ? "block" : "none"; } }
+  $("#camPose").textContent = POSES[curPose] + (last ? " · Vorlage vom " + dateLabel(last.date) : "");
+  $("#camTimer").textContent = camTimer ? "⏱ " + camTimer + " s" : "⏱ aus";
+  $("#camWrap").style.display = "block"; document.body.classList.add("cam-open");
+}
+function closeCam() {
+  if (camStream) camStream.getTracks().forEach(t => t.stop()); camStream = null;
+  $("#camWrap").style.display = "none"; document.body.classList.remove("cam-open"); $("#camCount").textContent = "";
+}
+async function shoot() {
+  const v = $("#camVideo"); if (!v.videoWidth) return;
+  for (let t = camTimer; t > 0; t--) { $("#camCount").textContent = t; await new Promise(r => setTimeout(r, 1000)); if (!camStream) return; }
+  $("#camCount").textContent = "";
+  let w = v.videoWidth, h = v.videoHeight; const s = Math.min(1, 1280 / Math.max(w, h)); w = Math.round(w * s); h = Math.round(h * s);
+  const c = document.createElement("canvas"); c.width = w; c.height = h; const ctx = c.getContext("2d");
+  if (camFacing === "user") { ctx.translate(w, 0); ctx.scale(-1, 1); } // wie in der Vorschau (gespiegelt) speichern → passt zur Vorlage
+  ctx.drawImage(v, 0, 0, w, h);
+  await savePhoto(c.toDataURL("image/jpeg", 0.82));
+  closeCam();
+}
+on("#camBtn", "click", openCam);
+on("#camClose", "click", closeCam);
+on("#camShoot", "click", shoot);
+on("#camFlip", "click", async () => { camFacing = camFacing === "user" ? "environment" : "user"; closeCam(); await openCam(); });
+on("#camTimer", "click", () => { camTimer = camTimer === 0 ? 5 : camTimer === 5 ? 10 : 0; $("#camTimer").textContent = camTimer ? "⏱ " + camTimer + " s" : "⏱ aus"; });
+on("#camGhostTgl", "click", () => { ghostOn = !ghostOn; const g = $("#camGhost"); if (g.getAttribute("src")) g.style.display = ghostOn ? "block" : "none"; });
 function resizeImage(file, maxDim, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1217,17 +1264,75 @@ function resizeImage(file, maxDim, quality) {
   });
 }
 async function renderPhotos() {
-  const grid = $("#photoGrid"); if (!grid) return; grid.innerHTML = "";
-  if (!state.photos.length) { grid.innerHTML = `<div class="empty">Noch keine Fotos.</div>`; return; }
-  for (const p of [...state.photos].reverse()) {
+  const chips = $("#poseChips"), grid = $("#photoGrid"); if (!grid) return;
+  if (chips) {
+    chips.innerHTML = "";
+    for (const k of Object.keys(POSES)) {
+      const n = posePhotos(k).length; if (k === "other" && !n) continue;
+      const b = document.createElement("button"); b.type = "button"; b.className = "chip" + (k === curPose ? " on" : "");
+      b.textContent = POSES[k] + (n ? " · " + n : ""); b.onclick = () => { curPose = k; renderPhotos(); };
+      chips.appendChild(b);
+    }
+  }
+  const list = posePhotos(curPose), last = list[list.length - 1];
+  const ph = $("#poseHint");
+  if (ph) ph.textContent = (last ? `Letztes Foto „${POSES[curPose]}“: ${dateLabel(last.date)}. ` : "") + "Tipp: morgens, gleiches Licht, gleiche Stelle — die Vorlage hilft beim Ausrichten. Für Rücken/Schultern den Selbstauslöser nutzen.";
+  grid.innerHTML = list.length ? "" : `<div class="empty">Noch kein Foto für „${POSES[curPose]}“.</div>`;
+  for (const p of [...list].reverse()) {
     const d = document.createElement("div");
     d.className = "photo";
-    d.innerHTML = `<img loading="lazy" /><div class="cap">${esc(p.date)}</div><button class="del">✕</button>`;
+    d.innerHTML = `<img loading="lazy" alt="${esc(POSES[curPose])} ${esc(p.date)}" /><div class="cap">${esc(dateLabel(p.date))}</div><button class="del" aria-label="Foto löschen">✕</button>`;
     idbGet(p.id).then(url => { if (url) d.querySelector("img").src = url; });
     d.querySelector(".del").onclick = async () => { if (confirm("Foto löschen?")) { await idbDel(p.id); state.photos = state.photos.filter(x => x.id !== p.id); persist(); renderPhotos(); } };
     grid.appendChild(d);
   }
+  renderCompare();
 }
+// Vorher/Nachher: Regler blendet über, dazu Gewicht/Bauch/Körperfett vom jeweiligen Tag
+function weighInOn(date) { let best = null; for (const w of state.weights) if (w.date <= date) best = w; return best; }
+async function renderCompare() {
+  const card = $("#cmpCard"); if (!card) return;
+  const list = posePhotos(curPose);
+  if (list.length < 2) { card.style.display = "none"; return; }
+  card.style.display = "block";
+  const A = $("#cmpA"), B = $("#cmpB");
+  const opts = list.map(p => `<option value="${p.id}">${esc(dateLabel(p.date))}</option>`).join("");
+  const keepA = A.value, keepB = B.value;
+  if (A._opts !== opts) { A.innerHTML = opts; B.innerHTML = opts; A._opts = opts; }
+  A.value = list.some(p => p.id === keepA) ? keepA : list[0].id;
+  B.value = list.some(p => p.id === keepB) && keepB !== A.value ? keepB : list[list.length - 1].id;
+  const pa = list.find(p => p.id === A.value), pb = list.find(p => p.id === B.value);
+  const [ua, ub] = await Promise.all([idbGet(pa.id), idbGet(pb.id)]);
+  $("#cmpImgA").src = ua || ""; $("#cmpImgB").src = ub || "";
+  applyCmpRange();
+  const info = (p) => { const w = weighInOn(p.date); if (!w) return "–"; const P = state.profile;
+    const bf = w.waistCm ? navyBf(w.waistCm, Number(P.neckCm), Number(P.hipCm), Number(P.heightCm), P.sex) : (w.bfScale || null);
+    return `${fmtKg(w.kg)} kg${w.waistCm ? " · Bauch " + String(w.waistCm).replace(".", ",") + " cm" : ""}${bf ? " · KF " + String(bf).replace(".", ",") + " %" : ""}`; };
+  const days = Math.round((Date.parse(pb.date) - Date.parse(pa.date)) / 864e5);
+  $("#cmpInfo").innerHTML = `<div><span>Vorher</span>${esc(dateLabel(pa.date))} · ${info(pa)}</div><div><span>Nachher</span>${esc(dateLabel(pb.date))} · ${info(pb)}</div><div class="cmp-days">${Math.abs(days)} Tage dazwischen</div>`;
+  $("#aiCmpBox").innerHTML = "";
+}
+function applyCmpRange() { const v = Number(($("#cmpRange") || {}).value || 50); const b = $("#cmpImgB"), l = $("#cmpLine"); if (b) b.style.clipPath = `inset(0 0 0 ${v}%)`; if (l) l.style.left = v + "%"; }
+on("#cmpRange", "input", applyCmpRange);
+on("#cmpA", "change", renderCompare);
+on("#cmpB", "change", renderCompare);
+on("#aiCmpBtn", "click", async () => {
+  const box = $("#aiCmpBox"), k = whoopKey();
+  if (!k) { box.innerHTML = `<div class="vision-msg err">Für den KI-Vergleich einmalig im Körper-Tab den App-Schlüssel hinterlegen.</div>`; return; }
+  if (!confirm("Die beiden Fotos werden zur Auswertung an deinen eigenen Cloudflare-Account geschickt (nicht an Dritte) und dort nicht gespeichert. Fortfahren?")) return;
+  box.innerHTML = `<div class="vision-msg loading"><span class="spin"></span>Vergleiche die Fotos…</div>`;
+  try {
+    const shrink = (url) => new Promise((res) => { const i = new Image(); i.onload = () => { const s = Math.min(1, 768 / Math.max(i.width, i.height)); const c = document.createElement("canvas"); c.width = Math.round(i.width * s); c.height = Math.round(i.height * s); c.getContext("2d").drawImage(i, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", 0.75)); }; i.onerror = () => res(url); i.src = url; });
+    const [a, b] = await Promise.all([shrink($("#cmpImgA").src), shrink($("#cmpImgB").src)]);
+    const list = posePhotos(curPose), pa = list.find(p => p.id === $("#cmpA").value), pb = list.find(p => p.id === $("#cmpB").value);
+    const r = await fetch(WHOOP_WORKER + "/vision/compare", { method: "POST", headers: { "Content-Type": "application/json", "X-App-Token": k },
+      body: JSON.stringify({ a, b, pose: POSES[curPose], days: Math.round((Date.parse(pb.date) - Date.parse(pa.date)) / 864e5) }) });
+    const d = await r.json();
+    if (!d || !d.ok) { box.innerHTML = `<div class="vision-msg err">KI-Vergleich gerade nicht möglich (${esc((d && d.error) || "unbekannt")}).</div>`; return; }
+    box.innerHTML = `<div class="ai-cmp"><div class="ai-sum">${esc(d.summary || "")}</div>${(d.changes || []).map(c => `<div class="insight ${c.trend === "besser" ? "good" : c.trend === "schlechter" ? "bad" : ""}"><b>${esc(c.area)}</b><span class="idiff">${esc(c.text)}</span></div>`).join("")}
+      <p class="hint">${esc(d.note || "")} KI-Eindruck aus zwei Fotos — Licht und Haltung beeinflussen viel. Maßband und Gewichtstrend sind die verlässlicheren Zahlen.</p></div>`;
+  } catch { box.innerHTML = `<div class="vision-msg err">Server nicht erreichbar (offline?).</div>`; }
+});
 
 // ---------- goals ----------
 function fillGoals() {

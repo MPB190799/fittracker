@@ -242,5 +242,28 @@ await page.click('#jflags .chip:has-text("Krafttraining")');
 (await page.evaluate(() => effFlags(dayOffset(today(), -3)).kraft)) === false ? ok("Antippen überschreibt Automatik") : fail("Override");
 await page.evaluate(() => { selDate = today(); refreshDate(); });
 
+// 20) Fortschrittsfotos: Pose „Rücken“, zwei Fotos an zwei Tagen → Vorher/Nachher + KI-Vergleich (simuliert)
+await page.route("**/vision/compare", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true, summary: "Taille wirkt schmaler.", changes: [{ area: "Taille", text: "sichtbar schmaler", trend: "besser" }], note: "" }) }));
+await page.click('nav.tabs button[data-tab="photos"]');
+await page.click('#poseChips .chip:has-text("Rücken")');
+await page.evaluate(() => { selDate = dayOffset(today(), -42); refreshDate(); });
+await page.setInputFiles("#photoInput", new URL("./body1.jpg", import.meta.url).pathname);
+await page.waitForFunction(() => state.photos.some(p => p.pose === "back"));
+await page.evaluate(() => { selDate = today(); refreshDate(); });
+await page.setInputFiles("#photoInput", new URL("./body2.jpg", import.meta.url).pathname);
+await page.waitForFunction(() => state.photos.filter(p => p.pose === "back").length === 2);
+await page.waitForSelector("#cmpCard", { state: "visible" });
+await page.fill("#cmpRange", "30"); await page.dispatchEvent("#cmpRange", "input");
+const clip = await page.$eval("#cmpImgB", (e) => e.style.clipPath);
+/42 Tage dazwischen/.test(await page.textContent("#cmpInfo")) && clip.includes("30%") ? ok("Vorher/Nachher: 42 Tage, Regler funktioniert") : fail("Vergleich: " + clip);
+await page.click("#aiCmpBtn");
+await page.waitForSelector(".ai-cmp");
+/Taille/.test(await page.textContent("#aiCmpBox")) ? ok("KI-Vergleich angezeigt (nach Rückfrage)") : fail("KI-Vergleich");
+
+// 21) Waagen-Körperfett beim Wiegen
+await page.click('nav.tabs button[data-tab="weight"]');
+await page.fill("#weightInput", "109.6"); await page.fill("#bfScaleInput", "31.5"); await page.click("#saveWeight");
+/Waage 31,5 % KF/.test(await page.textContent("#weightList")) ? ok("Waagen-KF gespeichert und angezeigt") : fail("Waage-KF");
+
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();

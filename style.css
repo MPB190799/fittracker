@@ -386,3 +386,28 @@ nav.tabs button.active::before { content: ""; position: absolute; top: -9px; wid
 .chip.auto::after { content: "auto"; position: absolute; top: -7px; right: 6px; font-size: 9px; font-weight: 600; letter-spacing: .3px; padding: 0 5px; border-radius: 999px; background: #22223a; color: var(--muted); border: 1px solid var(--line2); }
 .chip.auto.on::after { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 #jAutoHint b { color: var(--text); font-weight: 500; }
+
+/* Fortschrittsfotos */
+.pose-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.cmp { position: relative; width: 100%; aspect-ratio: 3/4; border-radius: 16px; overflow: hidden; background: var(--raised); margin-top: 4px; }
+.cmp img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cmp-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--gold); box-shadow: 0 0 10px rgba(212,175,55,.8); transform: translateX(-1px); pointer-events: none; }
+.cmp-tag { position: absolute; top: 10px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(8,8,16,.7); }
+.cmp-tag.l { left: 10px; } .cmp-tag.r { right: 10px; color: var(--gold); }
+#cmpRange { width: 100%; margin: 12px 0 4px; accent-color: var(--gold); }
+.cmp-info { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.cmp-info span { display: inline-block; width: 64px; color: var(--text); font-weight: 500; }
+.cmp-days { font-family: var(--mono); font-size: 12px; }
+.ai-cmp { margin-top: 12px; }
+.ai-sum { font-size: 15px; margin-bottom: 10px; }
+.cam { position: fixed; inset: 0; z-index: 80; background: #000; }
+.cam video, .cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cam video.mirror { transform: scaleX(-1); }
+.cam img { opacity: .33; pointer-events: none; }
+.cam-top { position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cam-top span { font-size: 13px; background: rgba(8,8,16,.6); padding: 6px 12px; border-radius: 999px; }
+.cam-top button, .cam-bar button { background: rgba(8,8,16,.6); color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; padding: 9px 13px; font-size: 14px; }
+.cam-bar { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom)); left: 0; right: 0; display: flex; align-items: center; justify-content: space-around; }
+#camShoot { width: 74px; height: 74px; border-radius: 50%; background: var(--metal); border: 4px solid rgba(255,255,255,.85); padding: 0; }
+.cam-count { position: absolute; inset: 0; display: grid; place-items: center; font: 500 120px var(--mono); color: var(--gold); text-shadow: 0 0 30px rgba(0,0,0,.8); pointer-events: none; }
+body.cam-open nav.tabs, body.cam-open #fab { display: none; }

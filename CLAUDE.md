@@ -47,6 +47,11 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   geschlafen (Schlaf ≥ 85 %), Kraft/Sport (Whoop-Workouts ≥ 15 min, Scope `read:workout`), Alkohol/Koffein ab 15 Uhr/
   spät gegessen aus Einträgen (Wortgrenzen ohne Lookbehind — älteres iOS-Safari!). Manuell (`journal[d].flags`,
   auch false) hat Vorrang.
+- Fortschrittsfotos: `photos[].pose` (front/side/back/shoulder/other), eigene Kamera (getUserMedia) mit
+  halbtransparenter Vorlage = letztes Foto derselben Pose, Selbstauslöser; Vorher/Nachher-Regler mit Gewicht/Bauch/KF.
+  KI-Vergleich `/vision/compare` NUR über Workers AI (Körperfotos nie an Groq/Dritte), mit Rückfrage. Fotos bleiben
+  sonst lokal (IndexedDB). Erinnerung nach 21 Tagen.
+- Waagen-Körperfett `weights[].bfScale`: zweite Quelle hinter Maßband (Navy) — Bioimpedanz nur als Trend.
 - Whoop-Bonus (`whoopBonus`): Whoop-Tagesverbrauch über Plan-/Messverbrauch → 50 % davon ins Tagesziel (abschaltbar).
 - Wochen-Check (`checkinSuggestion`): alle 7 Tage neues kcal-Ziel vorschlagen (Messung, sonst Formel).
 - Backup (`doBackup`): Teilen-Menü (→ OneDrive), sonst Download; Erinnerung nach 7 Tagen (`fittracker:lastBackup`).

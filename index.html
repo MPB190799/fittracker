@@ -209,8 +209,9 @@
         <div class="row" style="margin-top:12px">
           <div class="field" style="margin:0"><label>Gewicht (kg)</label><input type="number" inputmode="decimal" step="0.1" id="weightInput" placeholder="kg" /></div>
           <div class="field" style="margin:0"><label>Bauch (cm)</label><input type="number" inputmode="decimal" step="0.5" id="waistInput" placeholder="cm" /></div>
-          <button class="primary" style="max-width:120px;align-self:flex-end" id="saveWeight">Speichern</button>
+          <div class="field" style="margin:0"><label>KF % Waage</label><input type="number" inputmode="decimal" step="0.1" id="bfScaleInput" placeholder="%" /></div>
         </div>
+        <button class="primary" id="saveWeight" style="margin-top:10px">Speichern</button>
         <div class="wlist" id="weightList"></div>
       </div>
     </section>
@@ -218,11 +219,42 @@
     <!-- TAB: Fotos -->
     <section class="tabpage" id="tab-photos">
       <div class="card">
-        <h2>Progress-Fotos</h2>
-        <input type="file" accept="image/*" capture="environment" id="photoInput" style="display:none" />
-        <button class="primary scanbtn" id="addPhoto"><svg class="bi" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Foto aufnehmen</button>
-        <p class="hint">Tipp: immer gleiche Pose, gleiches Licht, morgens — dann sieht man den Fortschritt am besten.</p>
-        <div class="photo-grid" id="photoGrid" style="margin-top:12px"></div>
+        <h2>Fortschrittsfotos</h2>
+        <div class="chips" id="poseChips"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary scanbtn" id="camBtn"><svg class="bi" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Mit Vorlage aufnehmen</button>
+          <button class="ghost" id="pickBtn" style="max-width:120px">Galerie</button>
+        </div>
+        <input type="file" accept="image/*" id="photoInput" style="display:none" />
+        <p class="hint" id="poseHint"></p>
+        <div class="pose-strip" id="photoGrid"></div>
+      </div>
+      <div class="card" id="cmpCard">
+        <h2>Vorher / Nachher</h2>
+        <div class="row">
+          <div class="field"><label>Vorher</label><select id="cmpA"></select></div>
+          <div class="field"><label>Nachher</label><select id="cmpB"></select></div>
+        </div>
+        <div class="cmp" id="cmpView">
+          <img id="cmpImgA" alt="Vorher" /><img id="cmpImgB" alt="Nachher" />
+          <div class="cmp-line" id="cmpLine"></div>
+          <span class="cmp-tag l">Vorher</span><span class="cmp-tag r">Nachher</span>
+        </div>
+        <input type="range" id="cmpRange" min="0" max="100" value="50" aria-label="Vorher/Nachher-Regler" />
+        <div class="cmp-info" id="cmpInfo"></div>
+        <button class="ghost" id="aiCmpBtn" style="width:100%;margin-top:12px">KI-Vergleich der beiden Fotos</button>
+        <div id="aiCmpBox"></div>
+      </div>
+      <div class="cam" id="camWrap" style="display:none">
+        <video id="camVideo" playsinline autoplay muted></video>
+        <img id="camGhost" alt="" />
+        <div class="cam-count" id="camCount"></div>
+        <div class="cam-top"><button id="camClose" aria-label="Schließen">✕</button><span id="camPose"></span><button id="camGhostTgl" aria-label="Vorlage an/aus">Vorlage</button></div>
+        <div class="cam-bar">
+          <button id="camTimer" aria-label="Selbstauslöser">⏱ aus</button>
+          <button id="camShoot" aria-label="Foto aufnehmen"></button>
+          <button id="camFlip" aria-label="Kamera wechseln">⟲</button>
+        </div>
       </div>
     </section>
 

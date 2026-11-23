@@ -210,6 +210,30 @@ export default {
       }
     }
 
+    // 6b) Fortschrittsfotos vergleichen — NUR Cloudflare Workers AI im eigenen Account (Körperfotos gehen
+    // bewusst nicht an Groq/Dritte). Nichts wird gespeichert.
+    if (path === "/vision/compare") {
+      if (req.method !== "POST") return json({ error: "method" }, 405, ch);
+      if (key !== env.APP_TOKEN) return json({ ok: false, error: "unauthorized" }, 401, ch);
+      if (!env.AI) return json({ ok: false, error: "no_ai" }, 200, ch);
+      let body; try { body = await req.json(); } catch { return json({ ok: false, error: "bad_body" }, 400, ch); }
+      const imgs = [body.a, body.b].map(x => String(x || ""));
+      if (imgs.some(x => !/^data:image\/[a-z0-9.+-]+;base64,/i.test(x) || x.length < 200)) return json({ ok: false, error: "no_image" }, 400, ch);
+      const prompt = COMPARE_PROMPT(String(body.pose || "Körper").slice(0, 40), Math.max(0, parseInt(body.days, 10) || 0));
+      const content = [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: imgs[0] } }, { type: "image_url", image_url: { url: imgs[1] } }];
+      const r = await cfChat(env, content);
+      if (!r.raw) return json({ ok: false, error: r.err || "cf" }, 200, ch);
+      try {
+        const raw = r.raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```(?:json)?/g, "").trim();
+        let p; try { p = JSON.parse(raw); } catch { const m = raw.match(/\{[\s\S]*\}/); p = m ? JSON.parse(m[0]) : null; }
+        if (!p) throw new Error("unparsable");
+        const changes = (Array.isArray(p.changes) ? p.changes : []).slice(0, 6).map(c => ({
+          area: String(c.area || "").slice(0, 40), text: String(c.text || "").slice(0, 200),
+          trend: ["besser", "gleich", "schlechter"].includes(c.trend) ? c.trend : "gleich" })).filter(c => c.area && c.text);
+        return json({ ok: true, summary: String(p.summary || "").slice(0, 300), changes, note: String(p.note || "").slice(0, 200), model: r.used }, 200, ch);
+      } catch (e) { return json({ ok: false, error: "unparsable" }, 200, ch); }
+    }
+
     // 7) Lebensmittel-Suche (Open Food Facts, server-seitig) — search.openfoodfacts.org
     // sendet an den Browser KEINEN Access-Control-Allow-Origin-Header (bestätigt per curl),
     // Direkt-Fetch aus der PWA ist deshalb immer CORS-blockiert. Server-zu-Server geht das nicht an.
@@ -326,6 +350,26 @@ async function cfRaw(env, mime, b64, hint) {
     }
   }
   return { raw: null, err: "cf_" + errs.join("|").slice(0, 160) };
+}
+
+const COMPARE_PROMPT = (pose, days) =>
+  'Du bist ein erfahrener, ehrlicher Fitness-Coach. Bild 1 ist VORHER, Bild 2 ist NACHHER (' + days + ' Tage später), Pose: ' + pose + '.\n' +
+  'Vergleiche sichtbare Veränderungen der Körperzusammensetzung: Taille/Bauch, Brust, Schultern, Arme, Rücken, Definition, Haltung — nur was du wirklich siehst.\n' +
+  'Sei vorsichtig: Licht, Winkel, Abstand und Pump verfälschen. Nenne keine Körperfett-Prozentzahlen und keine medizinischen Aussagen. Bleib motivierend, aber ehrlich.\n' +
+  'Antworte AUSSCHLIESSLICH mit reinem JSON ohne Markdown: {"summary":"1-2 Sätze Gesamteindruck","changes":[{"area":"z.B. Taille","text":"kurz, was sich verändert hat","trend":"besser|gleich|schlechter"}],"note":"Hinweis, falls Licht/Winkel den Vergleich erschweren, sonst leer"}';
+// Allgemeiner Workers-AI-Aufruf mit Modell-Fallback (für Vergleiche mit mehreren Bildern)
+async function cfChat(env, content) {
+  const errs = [];
+  for (const model of [...new Set([env.CF_VISION_MODEL, ...CF_VISION_MODELS].filter(Boolean))]) {
+    for (const extra of [{ chat_template_kwargs: { enable_thinking: false }, response_format: { type: "json_object" } }, { reasoning_effort: "low" }, {}]) {
+      try {
+        const res = await env.AI.run(model, { messages: [{ role: "user", content }], max_tokens: 1500, temperature: 0.3, ...extra });
+        const raw = aiText(res);
+        if (raw && /\{/.test(raw)) return { raw, used: model };
+      } catch (e) { const m = String(e && e.message || e); errs.push(m.slice(0, 60)); if (/neuron|quota|limit|4006|capacity/i.test(m)) return { raw: null, err: "cf_limit" }; }
+    }
+  }
+  return { raw: null, err: "cf_" + errs.join("|").slice(0, 120) };
 }
 
 // Reihenfolge: Workers AI (gratis) → Groq (Notfall, ~0,1 Cent/Foto, nur wenn Key gesetzt)

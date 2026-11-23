@@ -91,4 +91,16 @@ ok(d22.bed === "22:40" && d22.wake === "06:50" && d22.workouts && d22.workouts[0
 globalThis.fetch = async (u) => String(u).includes("/workout") ? new Response("{}", { status: 403 }) : new Response(JSON.stringify({ records: [] }));
 d = await call("/whoop/history?days=3");
 ok(d.needsWorkoutScope === true, "fehlende Workout-Berechtigung wird erkannt");
+
+// 9) Fotovergleich nur über Workers AI, 2 Bilder, nie Groq
+let groqHit = 0, seen = null;
+globalThis.fetch = async () => { groqHit++; return new Response("{}"); };
+env.AI = { run: async (model, inp) => { seen = inp.messages[0].content.filter(c => c.type === "image_url").length;
+  return { response: '{"summary":"Taille sichtbar schmaler.","changes":[{"area":"Taille","text":"schmaler","trend":"besser"},{"area":"Schultern","text":"unverändert","trend":"gleich"}],"note":""}' }; } };
+const big = "data:image/jpeg;base64," + "A".repeat(300);
+d = await call("/vision/compare", { method: "POST", body: JSON.stringify({ a: big, b: big, pose: "Bauch vorne", days: 42 }) });
+ok(d.ok && seen === 2 && d.changes.length === 2 && d.changes[0].trend === "besser" && groqHit === 0, "Fotovergleich: 2 Bilder an Workers AI, kein Groq");
+delete env.AI;
+d = await call("/vision/compare", { method: "POST", body: JSON.stringify({ a: big, b: big }) });
+ok(!d.ok && d.error === "no_ai" && groqHit === 0, "ohne Workers AI kein Ausweichen auf Dritte");
 process.exitCode = fails ? 1 : 0;
