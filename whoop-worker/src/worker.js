@@ -245,10 +245,11 @@ const GROQ_VISION_MODELS = ["qwen/qwen3.8-27b", "qwen/qwen3.6-27b", "meta-models
 function clampNum(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return Math.max(lo, Math.min(hi, Math.round(v * 10) / 10)); }
 const FOOD_PROMPT =
   'Du bist Ernährungswissenschaftler. Analysiere das Foto von Essen/Getränk.\n' +
+  'Ballaststoffe (fiber) und Zucker (sugar) in Gramm ebenfalls schätzen.\n' +
   'Trenne JEDE einzelne Komponente auf dem Teller (z.B. Reis, Hähnchen, Salat separat).\n' +
   'Schätze für JEDES Item realistisch die sichtbare Portionsgröße in Gramm und die Nährwerte FÜR DIESE PORTION (nicht pro 100 g).\n' +
   'Antworte AUSSCHLIESSLICH mit reinem JSON nach exakt diesem Schema, ohne Markdown/Code-Fences/Erklärung:\n' +
-  '{"items":[{"name":"deutscher Name","grams":Zahl,"kcal":Zahl,"protein":Zahl,"carbs":Zahl,"fat":Zahl,"confidence":0_bis_1}],"note":"kurzer deutscher Hinweis bei Unsicherheit, sonst leer"}\n' +
+  '{"items":[{"name":"deutscher Name","grams":Zahl,"kcal":Zahl,"protein":Zahl,"carbs":Zahl,"fat":Zahl,"fiber":Zahl,"sugar":Zahl,"confidence":0_bis_1}],"note":"kurzer deutscher Hinweis bei Unsicherheit, sonst leer"}\n' +
   'Ist kein Essen erkennbar: {"items":[],"note":"Kein Essen auf dem Foto erkannt"}.';
 
 async function groqCall(apiKey, reqBody) {
@@ -369,6 +370,8 @@ function parseFood(rawIn, used) {
     protein: clampNum(it.protein, 0, 600),
     carbs: clampNum(it.carbs, 0, 600),
     fat: clampNum(it.fat, 0, 600),
+    fiber: it.fiber != null ? clampNum(it.fiber, 0, 200) : null,
+    sugar: it.sugar != null ? clampNum(it.sugar, 0, 600) : null,
     confidence: clampNum(it.confidence, 0, 1)
   })).filter(it => it.name);
   return { items, note: String(parsed.note || "").slice(0, 200), model: used };

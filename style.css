@@ -355,4 +355,13 @@ nav.tabs button.active::before { content: ""; position: absolute; top: -9px; wid
 .bonus-line:empty { display: none; }
 .bonus-line b { color: var(--green); font-family: var(--mono); font-weight: 500; }
 
+/* Ballaststoffe / Zucker */
+.macros2.small { margin-top: 14px; }
+.m2.fi .bar > i { background: #4ade80; opacity: .75; }
+.m2.fi .bar > i.done { opacity: 1; box-shadow: 0 0 8px -2px rgba(34, 197, 94, .8); }
+.m2.su .bar > i { background: #9a9ab0; }
+.m2.su .bar > i.over { background: var(--red); }
+#fiTgt { font-size: 11px; }
+.insight b { display: block; font-weight: 600; }
+.insight .idiff { display: block; font-size: 12px; margin-top: 2px; }
 .lk-link{display:block;margin-top:14px;text-align:right;font-size:.85rem;color:var(--gold);text-decoration:none;letter-spacing:.02em}

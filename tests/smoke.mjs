@@ -103,7 +103,7 @@ const rate8 = await page.evaluate(() => planRate());
 const expKcal = Math.max(1500, Math.round((Math.round(bmr * 1.375) + rate8 * 1100) / 10) * 10);
 const plan = await page.textContent("#planBox");
 const num = +(plan.match(/([\d.]+)\s*kcal pro Tag/) || [])[1]?.replace(".", "");
-num === expKcal && /180\s*Eiweiß/.test(plan) ? ok(`Empfohlener Cut (${rate8} kg/Woche): ${num} kcal, 180 g Eiweiß`) : fail(`Plan: erwartet ${expKcal}: ` + plan.slice(0, 200));
+num === expKcal && /220\s*Eiweiß/.test(plan) ? ok(`Empfohlener Cut (${rate8} kg/Woche): ${num} kcal, 220 g Eiweiß (2 g × 110 kg)`) : fail(`Plan: erwartet ${expKcal}: ` + plan.slice(0, 200));
 await page.click("#planApply");
 { const kt = await page.evaluate(() => JSON.parse(localStorage.getItem("fittracker:db")).profile.kcalTarget); kt === expKcal ? ok("Plan als Tagesziel übernommen") : fail("Plan nicht übernommen: " + kt + " statt " + expKcal); }
 // Stufen: Krass < Empfohlen < Leicht, und nie unter 1500 kcal
@@ -171,6 +171,36 @@ const ci = await page.evaluate(() => { state.profile.lastCheckin = null; state.p
 if (ci && await page.$("#ciApply")) { await page.click("#ciApply"); }
 ci && (await page.evaluate(() => state.profile.kcalTarget)) === ci.kcal && !(await page.$("#ciApply"))
   ? ok(`Wochen-Check: ${ci.kcal} kcal vorgeschlagen und übernommen`) : fail("Check-in: " + JSON.stringify(ci));
+
+// 15) Eiweiß-Basis umschaltbar: Zielgewicht → weniger als bei aktuellem Gewicht
+const pCur = await page.evaluate(() => proteinTarget());
+await page.click('nav.tabs button[data-tab="goals"]'); await page.selectOption("#goalProtBasis", "goal");
+const pGoal = await page.evaluate(() => proteinTarget());
+pCur === Math.round(2 * (await page.evaluate(() => latestWeight()))) && pGoal < pCur ? ok(`Eiweiß: ${pCur} g (aktuelles Gewicht) / ${pGoal} g (Zielgewicht)`) : fail(`Eiweiß-Basis ${pCur}/${pGoal}`);
+await page.selectOption("#goalProtBasis", "current");
+
+// 16) Ballaststoffe & Zucker + Uhrzeit beim Eintragen
+await page.click('nav.tabs button[data-tab="diary"]');
+await page.evaluate(() => { state.entries = state.entries.filter(e => e.date !== today()); persist(); renderAll(); });
+await page.click("#fab"); await page.fill("#searchInput", "haferflo"); await page.waitForSelector("#results .res"); await page.click("#results .res");
+await page.click("#saveEntry");
+const fi = (await page.textContent("#fiVal")).trim(), su = (await page.textContent("#suVal")).trim(), at = await page.evaluate(() => state.entries.find(e => e.date === today()).at);
+fi === "10" && su === "1" && /^\d\d:\d\d$/.test(at || "") ? ok(`Haferflocken 100 g: 10 g Ballaststoffe, 1 g Zucker, Uhrzeit ${at}`) : fail(`Ballast/Zucker ${fi}/${su}/${at}`);
+
+// 17) „Was dir gut tut“: Lesen am Abend ↔ Schlaf in der Nacht danach (nicht am selben Tag!)
+await page.evaluate(() => {
+  state.journal = {}; state.bodyLog = {}; state.suppLog = {}; state.phase = null;
+  for (let i = 1; i <= 12; i++) {
+    const d = dayOffset(today(), -i - 1), next = dayOffset(d, 1), reads = i % 2 === 0;
+    state.journal[d] = { flags: { lesen: reads, alkohol: !reads && i % 3 === 0 }, mood: 0, note: "" };
+    state.bodyLog[next] = { sleepPerf: reads ? 90 : 74, recovery: reads ? 70 : 58 };
+  }
+  persist();
+});
+await page.click('nav.tabs button[data-tab="body"]'); await page.waitForTimeout(300);
+await page.evaluate(() => renderInsights());
+const ins = await page.textContent("#insights");
+/Tut dir gut[\s\S]*Gelesen[\s\S]*Schlaf \+16 %/.test(ins) ? ok("Auswertung: Lesen → Schlaf +16 % in der Nacht danach") : fail("Insights: " + ins.slice(0, 220));
 
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();

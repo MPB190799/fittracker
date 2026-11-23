@@ -73,6 +73,10 @@
           <div class="m2 c"><div class="m2-top"><span>Kohlenhydrate</span><span><b id="cVal">0</b> <small id="cTgt"></small></span></div><div class="bar"><i id="cBar"></i></div></div>
           <div class="m2 f"><div class="m2-top"><span>Fett</span><span><b id="fVal">0</b> <small id="fTgt"></small></span></div><div class="bar"><i id="fBar"></i></div></div>
         </div>
+        <div class="macros2 small">
+          <div class="m2 fi"><div class="m2-top"><span>Ballaststoffe</span><span><b id="fiVal">0</b> <small id="fiTgt"></small></span></div><div class="bar"><i id="fiBar"></i></div></div>
+          <div class="m2 su"><div class="m2-top"><span>Zucker</span><span><b id="suVal">0</b> <small id="suTgt"></small></span></div><div class="bar"><i id="suBar"></i></div></div>
+        </div>
         <a id="toLK" class="lk-link" href="#" rel="noopener">Tag an Lebenskompass übergeben →</a>
       </div>
 
@@ -181,7 +185,7 @@
         <div class="body-head"><h2 style="margin:0">Verlauf</h2><button class="ghost" id="histRefresh" style="width:auto;padding:8px 12px">↻</button></div>
         <canvas id="trendChart"></canvas>
         <div class="trend-legend"><span class="lg rec">Recovery %</span> <span class="lg slp">Schlaf h</span></div>
-        <h3 class="bsec">Was dir gut tut</h3>
+        <h3 class="bsec">Was dir gut tut — Schlaf &amp; Erholung</h3>
         <div id="insights"><p class="hint">Wird berechnet, sobald ein paar Journal-Tage zusammenkommen (≈1 Woche).</p></div>
       </div>
 
@@ -258,7 +262,12 @@
       <div class="card">
         <h2>Ziele anpassen</h2>
         <div class="field"><label>Kalorien-Ziel (kcal/Tag)</label><input type="number" inputmode="numeric" id="goalKcal" /></div>
-        <div class="field"><label>Eiweiß (g pro kg Körpergewicht)</label><input type="number" inputmode="decimal" step="0.1" id="goalProteinPerKg" /></div>
+        <div class="row">
+          <div class="field"><label>Eiweiß (g pro kg)</label><input type="number" inputmode="decimal" step="0.1" id="goalProteinPerKg" /></div>
+          <div class="field"><label>gerechnet auf</label>
+            <select id="goalProtBasis"><option value="current">aktuelles Gewicht</option><option value="goal">Zielgewicht</option><option value="lean">fettfreie Masse</option></select>
+          </div>
+        </div>
         <p class="hint" id="proteinCalc"></p>
         <div class="row">
           <div class="field"><label>Kohlenhydrate (g/Tag)</label><input type="number" inputmode="numeric" id="goalCarb" /></div>
@@ -393,6 +402,10 @@
       <div class="field"><label>Eiweiß (g)</label><input type="number" inputmode="decimal" step="0.1" id="fProtein" /></div>
       <div class="field"><label>KH (g)</label><input type="number" inputmode="decimal" step="0.1" id="fCarbs" /></div>
       <div class="field"><label>Fett (g)</label><input type="number" inputmode="decimal" step="0.1" id="fFat" /></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Ballaststoffe (g)</label><input type="number" inputmode="decimal" step="0.1" id="fFiber" placeholder="optional" /></div>
+      <div class="field"><label>Zucker (g)</label><input type="number" inputmode="decimal" step="0.1" id="fSugar" placeholder="optional" /></div>
     </div>
     <p class="hint" id="per100hint"></p>
     <button class="primary" id="saveEntry">Hinzufügen</button>

@@ -36,6 +36,13 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Sonderphasen (`state.phase`): Suppenwoche (kcal fix), Heilfasten Buchinger (1 Entlastungstag ≤1000, Fastentage
   250–500, 2 Aufbautage; >7 Tage nur mit Arzt-Hinweis), Intervallfasten 16:8 (Essensfenster). Phasentage zählen
   nicht in die Verbrauchsmessung (`adaptiveEstimate`).
+- Eiweiß: g/kg × Basis (`proteinBasis`: current = Standard/Marcos Wunsch 2 g × aktuelles Gewicht, goal, lean).
+- Ballaststoffe (DGE ≥ 30 g) und Zucker (Orientierung WHO < 10 % kcal) als optionale Felder `fiber`/`sugar` je Eintrag
+  (OFF, lokale DB `LOCAL_FS`, Foto-KI); fehlende Angaben werden gezählt, nicht als 0 behandelt.
+- „Was dir gut tut“ (`wellbeingInsights`): Merkmale von Tag D (Journal-Flags inkl. lesen/früh/handy, auto „spät
+  gegessen“ aus Eintrags-Uhrzeit `at` ≥ 21:00, Supplements, Eiweiß/Zucker/Ballaststoffe/Wasser/über kcal) ↔ Schlaf
+  & Erholung an D+1. Min. 3 Tage mit/ohne, ≥ 6 Nächte gesamt; Phasentage ausgenommen. Lebenskompass-Habits
+  (Lesen, früh ins Bett) später per Sync statt Haken.
 - Whoop-Bonus (`whoopBonus`): Whoop-Tagesverbrauch über Plan-/Messverbrauch → 50 % davon ins Tagesziel (abschaltbar).
 - Wochen-Check (`checkinSuggestion`): alle 7 Tage neues kcal-Ziel vorschlagen (Messung, sonst Formel).
 - Backup (`doBackup`): Teilen-Menü (→ OneDrive), sonst Download; Erinnerung nach 7 Tagen (`fittracker:lastBackup`).
