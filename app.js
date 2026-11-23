@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v14.1 · 2026-11-23";
+const APP_VERSION = "v16 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -113,7 +113,8 @@ const PORTIONS = [
 ];
 
 const DEFAULT = {
-  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0 },
+  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0,
+    heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null },
   entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {}, // { "2026-06-11": { suppId: true } }
@@ -178,7 +179,10 @@ async function idbDel(id) { const db = await idb(); return new Promise((res, rej
 
 // ---------- helpers ----------
 function latestWeight() { return state.weights.length ? state.weights[state.weights.length - 1].kg : null; }
-function proteinTarget() { const w = latestWeight(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
+// Eiweiß pro kg: bei deutlichem Übergewicht auf das ZIELgewicht beziehen (gängige Praxis) —
+// 2 g × 110 kg = 220 g wäre unnötig hoch. Ohne Zielgewicht wie bisher aufs aktuelle Gewicht.
+function proteinBaseKg() { const w = latestWeight(), g = Number(state.profile.goalWeight) || 0; return w && g && g < w ? g : w; }
+function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 function dayEntries() { return state.entries.filter(e => e.date === selDate); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function round1(n) { return Math.round(n * 10) / 10; }
@@ -193,6 +197,17 @@ function setRing(id, pct) {
   el.style.strokeDashoffset = C * (1 - p);
   el.classList.toggle("over", pct > 1.0001);
 }
+// Einmaliger Moment beim App-Start: die Zahl im Zifferblatt zählt hoch. Danach sofort-Updates.
+let _counted = false;
+function countUp(id, to) {
+  const el = $("#" + id); if (!el) return;
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (_counted || reduce || !window.requestAnimationFrame) { el.textContent = to; _counted = true; return; }
+  _counted = true;
+  const t0 = performance.now(), dur = 900;
+  const step = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(to * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
 function renderSummary() {
   const es = dayEntries();
   const sum = es.reduce((a, e) => ({ kcal: a.kcal + e.kcal, p: a.p + e.protein, c: a.c + e.carbs, f: a.f + e.fat }), { kcal: 0, p: 0, c: 0, f: 0 });
@@ -201,7 +216,7 @@ function renderSummary() {
   const set = (id, v) => { const el = $("#" + id); if (el) el.textContent = v; };
   // kcal-Ring (Mitte = übrig)
   const restK = Math.round(kT - sum.kcal);
-  set("restKcal", restK);
+  countUp("restKcal", restK);
   set("kcalSub", Math.round(sum.kcal) + " / " + kT);
   setRing("ringKcal", kT ? sum.kcal / kT : 0);
   const rk = $("#restKcal"); if (rk) rk.classList.toggle("neg", restK < 0);
@@ -253,7 +268,7 @@ function renderMeals() {
   }
   const rep = document.createElement("button");
   rep.className = "ghost"; rep.style.cssText = "width:100%;margin-top:8px";
-  rep.textContent = "↻ Gestern wiederholen";
+  rep.textContent = "Gestern wiederholen";
   rep.onclick = copyYesterday;
   card.appendChild(rep);
 }
@@ -312,6 +327,90 @@ function renderTemplatesList() {
   }
 }
 
+// ---------- Körper & Ziel: Startwert per Formel (Mifflin-St Jeor) ----------
+// Grundumsatz = 10×kg + 6,25×cm − 5×Alter + 5 (Mann) bzw. −161 (Frau); × Aktivitätsfaktor = Verbrauch.
+// Defizit/Überschuss = Tempo (kg/Woche) × 7700 / 7. Nie unter den Grundumsatz und nie unter 1500/1200 kcal.
+function bodyPlan() {
+  const P = state.profile, w = latestWeight();
+  const h = Number(P.heightCm), by = Number(P.birthYear), act = Number(P.activity) || 1.375;
+  const need = [];
+  if (!w) need.push("dein aktuelles Gewicht (Tab Gewicht)");
+  if (!(h > 120 && h < 230)) need.push("deine Größe");
+  const age = by > 1920 ? new Date().getFullYear() - by : null;
+  if (!(age >= 14 && age <= 100)) need.push("dein Geburtsjahr");
+  if (need.length) return { ok: false, need };
+  const bmr = Math.round(10 * w + 6.25 * h - 5 * age + (P.sex === "w" ? -161 : 5));
+  const tdee = Math.round(bmr * act);
+  const gw = Number(P.goalWeight) || null;
+  let rate = Number(P.goalRate) || 0;
+  let warn = "";
+  if (gw && rate && Math.sign(gw - w) !== Math.sign(rate)) warn = gw < w ? "Dein Zielgewicht liegt unter deinem Gewicht — wähle beim Tempo „Abnehmen“." : "Dein Zielgewicht liegt über deinem Gewicht — wähle beim Tempo „Aufbauen“ oder „halten“.";
+  const floor = Math.max(bmr, P.sex === "w" ? 1200 : 1500);
+  let kcal = Math.round((tdee + rate * KCAL_PER_KG / 7) / 10) * 10;
+  let floored = false;
+  if (kcal < floor) { kcal = Math.ceil(floor / 10) * 10; floored = true; }
+  const realRate = Math.round((kcal - tdee) * 7 / KCAL_PER_KG * 100) / 100; // kg/Woche nach Boden-Korrektur
+  let eta = null;
+  if (gw && realRate && Math.sign(gw - w) === Math.sign(realRate)) {
+    const weeks = Math.abs(gw - w) / Math.abs(realRate);
+    const d = new Date(); d.setDate(d.getDate() + Math.round(weeks * 7));
+    eta = { weeks: Math.round(weeks), label: MON[d.getMonth()] + " " + d.getFullYear() };
+  }
+  const protBase = gw && gw < w ? gw : w;
+  const protein = Math.round(protBase * (P.proteinPerKg || 2));
+  const fat = Math.round(Math.max(0.8 * protBase, kcal * 0.25 / 9));
+  const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
+  const bmi = Math.round(w / ((h / 100) ** 2) * 10) / 10;
+  return { ok: true, w, age, bmr, tdee, kcal, floored, realRate, eta, protein, fat, carbs, gw, warn, bmi };
+}
+function fillPlanInputs() {
+  const P = state.profile, set = (id, v) => { const el = $("#" + id); if (el && document.activeElement !== el) el.value = v == null ? "" : v; };
+  set("pHeight", P.heightCm); set("pBirth", P.birthYear); set("pSex", P.sex || "m");
+  set("pAct", String(P.activity || 1.375)); set("pGoalW", P.goalWeight); set("goalRate", String(P.goalRate || 0));
+}
+function renderPlan() {
+  const box = $("#planBox"); if (!box) return;
+  fillPlanInputs();
+  const r = bodyPlan();
+  if (!r.ok) { box.innerHTML = `<p class="hint">Für deinen Vorschlag fehlt noch: <b>${r.need.join(", ")}</b>.</p>`; box._html = ""; return; }
+  const fmt = (n) => Math.round(n).toLocaleString("de-DE");
+  const rateTxt = r.realRate === 0 ? "Gewicht halten" : (r.realRate > 0 ? "+" : "−") + Math.abs(r.realRate).toLocaleString("de-DE") + " kg pro Woche";
+  const html = `
+    <div class="plan-hero"><span class="plan-num">${r.kcal}</span><span class="plan-unit">kcal pro Tag darfst du essen</span><span class="plan-rate">${rateTxt}${r.eta ? ` · Ziel ${r.gw.toLocaleString("de-DE")} kg ca. ${r.eta.label} (${r.eta.weeks} Wochen)` : ""}</span></div>
+    <div class="body-grid">
+      <div class="bcard"><div class="bval">${r.protein}</div><div class="blbl">Eiweiß g</div></div>
+      <div class="bcard"><div class="bval">${r.carbs}</div><div class="blbl">Kohlenh. g</div></div>
+      <div class="bcard"><div class="bval">${r.fat}</div><div class="blbl">Fett g</div></div>
+    </div>
+    <p class="hint">Grundumsatz ${fmt(r.bmr)} kcal · Verbrauch mit Alltag ${fmt(r.tdee)} kcal · BMI ${r.bmi.toLocaleString("de-DE")} · ${r.w.toLocaleString("de-DE")} kg, ${r.age} Jahre.${r.floored ? " <b>Gewähltes Tempo wäre unter deinem Grundumsatz — auf den sicheren Wert angehoben.</b>" : ""}</p>
+    ${r.warn ? `<p class="hint" style="color:var(--red)">${r.warn}</p>` : ""}
+    <button class="primary" id="planApply">Als meine Tagesziele übernehmen</button>`;
+  // Nur neu zeichnen, wenn sich wirklich etwas geändert hat — sonst geht ein Tipp auf „Übernehmen“
+  // verloren, wenn gleichzeitig das Eingabefeld seinen change-Event feuert (Blur beim Antippen).
+  if (box._html !== html) { box.innerHTML = html; box._html = html; }
+  $("#planApply").onclick = () => {
+    Object.assign(state.profile, { kcalTarget: r.kcal, carbTarget: r.carbs, fatTarget: r.fat });
+    persist(); fillGoals(); renderDiary(); renderAdaptive();
+    const b = $("#planApply"); if (b) { b.textContent = "Übernommen ✓"; setTimeout(() => { box._html = ""; renderPlan(); }, 1400); }
+  };
+}
+function savePlanField(key, raw, num) {
+  const v = num ? (raw === "" ? null : Number(String(raw).replace(",", "."))) : raw;
+  state.profile[key] = v; persist(); renderPlan(); renderAdaptive(); fillGoals(); renderSummary(); drawWeightChart(); renderGoalProgress();
+}
+on("#pHeight", "change", (e) => savePlanField("heightCm", e.target.value, true));
+on("#pBirth", "change", (e) => savePlanField("birthYear", e.target.value, true));
+on("#pSex", "change", (e) => savePlanField("sex", e.target.value, false));
+on("#pAct", "change", (e) => savePlanField("activity", e.target.value, true));
+on("#pGoalW", "change", (e) => savePlanField("goalWeight", e.target.value, true));
+function renderGoalProgress() {
+  const el = $("#goalProgress"); if (!el) return;
+  const w = latestWeight(), gw = Number(state.profile.goalWeight) || 0;
+  if (!w || !gw) { el.textContent = ""; return; }
+  const diff = Math.round((w - gw) * 10) / 10;
+  el.innerHTML = diff === 0 ? "Zielgewicht erreicht." : `Noch <b>${Math.abs(diff).toLocaleString("de-DE")} kg</b> bis zu deinem Ziel von ${gw.toLocaleString("de-DE")} kg.`;
+}
+
 // ---------- Mitwachsendes Kalorienziel (aus Gewichtstrend + gegessenen kcal) ----------
 // Idee wie MacroFactor: echter Verbrauch = Ø gegessen − (Gewichtsänderung × 7700 kcal/kg).
 // Rein lokal gerechnet. Ehrlich: nur mit genug Daten, sonst sagt die App, was fehlt.
@@ -361,7 +460,7 @@ function renderAdaptive() {
   const b = $("#adaptApply");
   if (b) b.onclick = () => { state.profile.kcalTarget = r.target; persist(); fillGoals(); renderDiary(); renderAdaptive(); };
 }
-on("#goalRate", "change", (e) => { state.profile.goalRate = Number(e.target.value) || 0; persist(); renderAdaptive(); });
+on("#goalRate", "change", (e) => { state.profile.goalRate = Number(e.target.value) || 0; persist(); renderAdaptive(); renderPlan(); });
 
 function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
 
@@ -633,7 +732,7 @@ async function startScan() {
   if (!window.Html5Qrcode) return alert("Scanner lädt noch — kurz warten und nochmal tippen.");
   if (!window.isSecureContext) return alert("Kamera-Scan braucht HTTPS — auf der mpb190799.github.io-URL funktioniert es.");
   $("#reader").style.display = "block";
-  $("#scanBtn").textContent = "⏹ Stoppen";
+  $("#scanBtn").textContent = "Scan stoppen";
   // Gezielt auf die Handels-Barcodes (EAN/UPC) scharfstellen → schneller + treffsicherer
   let cfg;
   if (window.Html5QrcodeSupportedFormats) {
@@ -650,7 +749,7 @@ async function startScan() {
   }
 }
 async function stopScan() {
-  const b = $("#scanBtn"); if (b) b.textContent = "📷 Barcode";
+  const b = $("#scanBtn"); if (b) b.innerHTML = '<svg class="bi" viewBox="0 0 24 24"><path d="M4 6v12M7 6v12M11 6v12M14 6v12M17 6v12M20 6v12"/></svg>Barcode';
   const r = $("#reader"); if (r) r.style.display = "none";
   if (scanner) { try { await scanner.stop(); scanner.clear(); } catch {} scanner = null; }
 }
@@ -688,7 +787,7 @@ on("#saveWeight", "click", () => {
   state.weights = state.weights.filter(w => w.date !== selDate);
   state.weights.push({ id: uid(), date: selDate, kg });
   state.weights.sort((a, b) => a.date.localeCompare(b.date));
-  persist(); $("#weightInput").value = ""; renderWeight(); renderSummary(); fillGoals();
+  persist(); $("#weightInput").value = ""; renderWeight(); renderSummary(); fillGoals(); renderPlan(); renderGoalProgress();
 });
 function renderWeight() {
   const list = $("#weightList"); if (!list) return; list.innerHTML = "";
@@ -708,7 +807,12 @@ function drawWeightChart() {
   const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
   const pts = state.weights.slice(-30);
   if (pts.length < 2) { ctx.fillStyle = "#8c8aa0"; ctx.font = "14px Outfit, sans-serif"; ctx.fillText("Ab 2 Einträgen erscheint hier dein Verlauf.", 4, 80); return; }
-  const ys = pts.map(p => p.kg); let min = Math.min(...ys), max = Math.max(...ys); if (min === max) { min -= 1; max += 1; }
+  const gw = Number(state.profile.goalWeight) || 0;
+  const ys = pts.map(p => p.kg); let min = Math.min(...ys), max = Math.max(...ys);
+  // Zielgewicht einblenden, wenn es nicht absurd weit weg ist (sonst wird die Kurve flach)
+  const showGoal = gw && Math.abs(gw - (gw < min ? min : max)) <= Math.max(6, (max - min) * 2);
+  if (showGoal) { min = Math.min(min, gw); max = Math.max(max, gw); }
+  if (min === max) { min -= 1; max += 1; }
   // x nach echtem Datum (Lücken sichtbar), nicht gleichmäßig nach Index
   const dnum = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
   const t0 = dnum(pts[0].date), span = Math.max(1, dnum(pts[pts.length - 1].date) - t0);
@@ -719,6 +823,11 @@ function drawWeightChart() {
   ctx.lineTo(gx(pts.length - 1), H - pad); ctx.lineTo(gx(0), H - pad); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
   ctx.strokeStyle = "#D4AF37"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
   pts.forEach((p, i) => { i ? ctx.lineTo(gx(i), gy(p.kg)) : ctx.moveTo(gx(i), gy(p.kg)); }); ctx.stroke();
+  if (showGoal) {
+    ctx.save(); ctx.strokeStyle = "rgba(34,197,94,.75)"; ctx.setLineDash([5, 5]); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(pad, gy(gw)); ctx.lineTo(W - pad, gy(gw)); ctx.stroke(); ctx.restore();
+    ctx.fillStyle = "#22c55e"; ctx.font = "11px 'IBM Plex Mono', monospace"; ctx.fillText("Ziel " + gw, W - pad - 60, gy(gw) - 6);
+  }
   const li = pts.length - 1; ctx.fillStyle = "#D4AF37"; ctx.beginPath(); ctx.arc(gx(li), gy(pts[li].kg), 4, 0, 7); ctx.fill();
   ctx.fillStyle = "#8c8aa0"; ctx.font = "11px 'IBM Plex Mono', monospace"; ctx.fillText(max.toFixed(1), 2, gy(max) - 6); ctx.fillText(min.toFixed(1), 2, gy(min) + 14);
 }
@@ -771,8 +880,9 @@ function fillGoals() {
   $("#goalProteinPerKg").value = state.profile.proteinPerKg;
   $("#goalCarb").value = state.profile.carbTarget;
   $("#goalFat").value = state.profile.fatTarget;
-  const w = latestWeight(), pt = proteinTarget();
-  $("#proteinCalc").textContent = w ? `= ${pt} g Eiweiß/Tag bei ${w} kg (zuletzt eingetragen).` : "Trag dein Gewicht ein → Eiweiß-Ziel rechnet sich automatisch.";
+  const w = latestWeight(), pt = proteinTarget(), base = proteinBaseKg();
+  $("#proteinCalc").textContent = !w ? "Trag dein Gewicht ein → Eiweiß-Ziel rechnet sich automatisch."
+    : base !== w ? `= ${pt} g Eiweiß/Tag, gerechnet auf dein Zielgewicht ${base} kg.` : `= ${pt} g Eiweiß/Tag bei ${w} kg (zuletzt eingetragen).`;
 }
 on("#saveGoals", "click", () => {
   // Leeres/ungültiges Feld darf das Ziel nie stillschweigend auf 0 setzen (kaputt wirkender
@@ -821,7 +931,7 @@ function switchTab(tab) {
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
   if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); renderWeekReport(); }
-  if (tab === "goals") { renderFoodsList(); renderTemplatesList(); renderAdaptive(); }
+  if (tab === "goals") { renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); }
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -1223,7 +1333,7 @@ function renderSuppInsights() {
 })();
 
 // ---------- boot ----------
-function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderAdaptive(); }
+function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderPlan(); renderAdaptive(); renderGoalProgress(); }
 try {
   $("#datePicker").value = selDate;
   { const l = $("#dateLabel"); if (l) l.textContent = dateLabel(selDate); }

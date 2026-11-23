@@ -268,3 +268,54 @@ nav.tabs button.active { color: var(--gold); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ===== Edel-Schicht: Uhren-Ästhetik, Tiefe, metallisches Gold ===== */
+:root { --gold-hi: #ecd27a; --gold-lo: #a8862a; --metal: linear-gradient(135deg, #ecd27a 0%, #D4AF37 45%, #b8942a 100%); }
+body { background: radial-gradient(120% 60% at 50% -10%, #12121f 0%, var(--ink) 60%) fixed, var(--ink); }
+.dial .glow { stroke: none; }
+.dial .minor line { stroke: #2a2a40; stroke-width: 1; stroke-linecap: round; }
+.dial .ticks line { stroke: #3a3a56; stroke-width: 1.6; }
+.dial .ticks line.n { stroke: var(--gold); stroke-width: 2.6; }
+.dial-num { font-weight: 400; }
+.dial-unit { letter-spacing: .3px; }
+
+/* Karten: Tiefe + feine Lichtkante statt harter Rahmen */
+.card {
+  background: linear-gradient(180deg, #11111d 0%, #0d0d18 100%);
+  border: 1px solid rgba(255, 255, 255, .045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 18px 40px -24px rgba(0, 0, 0, .9);
+}
+.bcard, .supp, .vision-item, .rec-hero { background: linear-gradient(180deg, #181828 0%, #141422 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04); }
+
+/* Metallisches Gold */
+button.primary, .icon-btn.gold, .vision-item .vadd {
+  background: var(--metal); color: #120f05;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 6px 18px -8px rgba(212, 175, 55, .55);
+}
+#fab { background: var(--metal); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .4), 0 12px 30px rgba(212, 175, 55, .25), 0 2px 6px rgba(0, 0, 0, .6); }
+.brand .mark { filter: drop-shadow(0 0 6px rgba(212, 175, 55, .35)); }
+
+/* Sheets: Gold-Haarlinie oben */
+.sheet { background: linear-gradient(180deg, #121220 0%, #0d0d18 40%); border-color: rgba(255, 255, 255, .05); }
+.sheet { border-top-color: rgba(212, 175, 55, .35); }
+
+/* Navigation: aktiver Tab mit Goldpunkt */
+nav.tabs { background: rgba(8, 8, 16, .82); border-top-color: rgba(255, 255, 255, .05); }
+nav.tabs button { position: relative; }
+nav.tabs button.active::before { content: ""; position: absolute; top: -9px; width: 18px; height: 2px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 10px rgba(212, 175, 55, .8); }
+
+/* Eingaben & Chips etwas feiner */
+.field input, .field select, .chip, #amountChips button, .date-pill, button.ghost { border-color: rgba(255, 255, 255, .06); }
+.chip.on { box-shadow: 0 0 0 1px rgba(212, 175, 55, .25), 0 0 14px -4px rgba(212, 175, 55, .5); }
+.supp.done .chk { box-shadow: 0 0 10px -2px rgba(34, 197, 94, .7); }
+.wseg.on { box-shadow: 0 0 8px -2px rgba(90, 169, 240, .7); }
+.bi { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.scanbtn { gap: 9px; }
+
+/* Körper & Ziel */
+.plan-hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14px 0 16px; }
+.plan-num { font-family: var(--mono); font-size: 44px; font-weight: 400; letter-spacing: -2px; line-height: 1; background: var(--metal); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.plan-unit { font-size: 14px; color: var(--text); margin-top: 6px; }
+.plan-rate { font-size: 13px; color: var(--muted); margin-top: 4px; }
+#planBox .body-grid { margin-bottom: 4px; }
+#planBox .primary { margin-top: 12px; }

@@ -27,6 +27,8 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Vision-Modelle verschwinden ohne Vorwarnung → Listen `CF_VISION_MODELS` (developers.cloudflare.com/workers-ai/models)
   und `GROQ_VISION_MODELS` (console.groq.com/docs/vision) prüfen; umstellbar per Worker-Variable
   `CF_VISION_MODEL` / `GROQ_VISION_MODEL`. Keine multimodalen Llama-Modelle (Meta-Lizenz schließt EU aus).
+- Körper & Ziel (`bodyPlan`): Mifflin-St Jeor × Aktivitätsfaktor ± Tempo×7700/7; nie unter Grundumsatz bzw.
+  1500 (Mann)/1200 (Frau). Eiweiß bei Abnehmziel auf Zielgewicht bezogen.
 - Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
   Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 
@@ -36,6 +38,7 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   Schriften Outfit (Text) + IBM Plex Mono (Zahlen), lokal in `fonts/` (kein Google-Fonts-Abruf).
 - Ein Blickfang: Kompass-Zifferblatt im Tagebuch (außen kcal, innen Eiweiß). Rest ruhig halten:
   Überschriften in Satzschreibung (keine Großbuchstaben-Labels), Linien-Icons statt Emojis in der Navigation.
+- App-Symbole: `python3 tools/make-icons.py` (Pillow) erzeugt icon-180/192/512.png; Favicon: `favicon.svg`.
 - Farb-Variablen in `style.css :root`; app.js nutzt `var(--green|gold|red)` inline.
 
 ## Prüfen (Definition of Done)

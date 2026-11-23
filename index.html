@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#080810" />
   <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon-192.png" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192" />
   <link rel="apple-touch-icon" href="icon-180.png" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -39,6 +40,9 @@
       <div class="hero">
         <div class="dial" role="img" aria-label="Tagesziel: Kalorien und Eiweiß">
           <svg viewBox="0 0 200 200" class="dial-svg">
+            <defs><radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#D4AF37" stop-opacity=".10"/><stop offset="70%" stop-color="#D4AF37" stop-opacity=".02"/><stop offset="100%" stop-color="#D4AF37" stop-opacity="0"/></radialGradient></defs>
+            <circle cx="100" cy="100" r="99" fill="url(#glow)" class="glow"/>
+            <g class="minor"><line x1="112.7" y1="3.8" x2="112.1" y2="7.8"/><line x1="125.1" y1="6.3" x2="124.1" y2="10.2"/><line x1="137.1" y1="10.4" x2="135.6" y2="14.1"/><line x1="148.5" y1="16.0" x2="146.5" y2="19.5"/><line x1="159.0" y1="23.0" x2="156.6" y2="26.2"/><line x1="177.0" y1="41.0" x2="173.8" y2="43.4"/><line x1="184.0" y1="51.5" x2="180.5" y2="53.5"/><line x1="189.6" y1="62.9" x2="185.9" y2="64.4"/><line x1="193.7" y1="74.9" x2="189.8" y2="75.9"/><line x1="196.2" y1="87.3" x2="192.2" y2="87.9"/><line x1="196.2" y1="112.7" x2="192.2" y2="112.1"/><line x1="193.7" y1="125.1" x2="189.8" y2="124.1"/><line x1="189.6" y1="137.1" x2="185.9" y2="135.6"/><line x1="184.0" y1="148.5" x2="180.5" y2="146.5"/><line x1="177.0" y1="159.0" x2="173.8" y2="156.6"/><line x1="159.0" y1="177.0" x2="156.6" y2="173.8"/><line x1="148.5" y1="184.0" x2="146.5" y2="180.5"/><line x1="137.1" y1="189.6" x2="135.6" y2="185.9"/><line x1="125.1" y1="193.7" x2="124.1" y2="189.8"/><line x1="112.7" y1="196.2" x2="112.1" y2="192.2"/><line x1="87.3" y1="196.2" x2="87.9" y2="192.2"/><line x1="74.9" y1="193.7" x2="75.9" y2="189.8"/><line x1="62.9" y1="189.6" x2="64.4" y2="185.9"/><line x1="51.5" y1="184.0" x2="53.5" y2="180.5"/><line x1="41.0" y1="177.0" x2="43.4" y2="173.8"/><line x1="23.0" y1="159.0" x2="26.2" y2="156.6"/><line x1="16.0" y1="148.5" x2="19.5" y2="146.5"/><line x1="10.4" y1="137.1" x2="14.1" y2="135.6"/><line x1="6.3" y1="125.1" x2="10.2" y2="124.1"/><line x1="3.8" y1="112.7" x2="7.8" y2="112.1"/><line x1="3.8" y1="87.3" x2="7.8" y2="87.9"/><line x1="6.3" y1="74.9" x2="10.2" y2="75.9"/><line x1="10.4" y1="62.9" x2="14.1" y2="64.4"/><line x1="16.0" y1="51.5" x2="19.5" y2="53.5"/><line x1="23.0" y1="41.0" x2="26.2" y2="43.4"/><line x1="41.0" y1="23.0" x2="43.4" y2="26.2"/><line x1="51.5" y1="16.0" x2="53.5" y2="19.5"/><line x1="62.9" y1="10.4" x2="64.4" y2="14.1"/><line x1="74.9" y1="6.3" x2="75.9" y2="10.2"/><line x1="87.3" y1="3.8" x2="87.9" y2="7.8"/></g>
             <g class="ticks">
               <line x1="100" y1="4" x2="100" y2="14" class="n"/><line x1="196" y1="100" x2="186" y2="100"/>
               <line x1="100" y1="196" x2="100" y2="186"/><line x1="4" y1="100" x2="14" y2="100"/>
@@ -183,6 +187,7 @@
       <div class="card">
         <h2>Gewicht</h2>
         <canvas id="weightChart"></canvas>
+        <p class="hint" id="goalProgress"></p>
         <div class="row" style="margin-top:12px">
           <div class="field" style="margin:0"><label>An diesem Tag (kg)</label><input type="number" inputmode="decimal" step="0.1" id="weightInput" placeholder="z.B. 88.5" /></div>
           <button class="primary" style="max-width:120px;align-self:flex-end" id="saveWeight">Speichern</button>
@@ -196,7 +201,7 @@
       <div class="card">
         <h2>Progress-Fotos</h2>
         <input type="file" accept="image/*" capture="environment" id="photoInput" style="display:none" />
-        <button class="primary scanbtn" id="addPhoto">📷 Foto aufnehmen / wählen</button>
+        <button class="primary scanbtn" id="addPhoto"><svg class="bi" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Foto aufnehmen</button>
         <p class="hint">Tipp: immer gleiche Pose, gleiches Licht, morgens — dann sieht man den Fortschritt am besten.</p>
         <div class="photo-grid" id="photoGrid" style="margin-top:12px"></div>
       </div>
@@ -204,6 +209,39 @@
 
     <!-- TAB: Ziele -->
     <section class="tabpage" id="tab-goals">
+      <div class="card" id="planCard">
+        <h2>Mein Körper &amp; Ziel</h2>
+        <div class="row">
+          <div class="field"><label>Größe (cm)</label><input type="number" inputmode="numeric" id="pHeight" placeholder="z.B. 185" /></div>
+          <div class="field"><label>Geburtsjahr</label><input type="number" inputmode="numeric" id="pBirth" placeholder="z.B. 1999" /></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Geschlecht</label>
+            <select id="pSex"><option value="m">Mann</option><option value="w">Frau</option></select>
+          </div>
+          <div class="field"><label>Zielgewicht (kg)</label><input type="number" inputmode="decimal" step="0.5" id="pGoalW" placeholder="z.B. 90" /></div>
+        </div>
+        <div class="field"><label>Alltag &amp; Sport</label>
+          <select id="pAct">
+            <option value="1.2">Sitzender Job, kaum Sport</option>
+            <option value="1.375">Sitzender Job + 1–3× Sport/Woche</option>
+            <option value="1.55">Sitzender Job + 4–5× Sport/Woche</option>
+            <option value="1.725">Körperlicher Job oder täglich Sport</option>
+          </select>
+        </div>
+        <div class="field"><label>Tempo</label>
+          <select id="goalRate">
+            <option value="-1">Abnehmen schnell (−1 kg/Woche)</option>
+            <option value="-0.75">Abnehmen zügig (−0,75 kg/Woche)</option>
+            <option value="-0.5">Abnehmen (−0,5 kg/Woche)</option>
+            <option value="-0.25">Abnehmen sanft (−0,25 kg/Woche)</option>
+            <option value="0">Gewicht halten</option>
+            <option value="0.25">Aufbauen (+0,25 kg/Woche)</option>
+            <option value="0.5">Aufbauen zügig (+0,5 kg/Woche)</option>
+          </select>
+        </div>
+        <div id="planBox"></div>
+      </div>
       <div class="card">
         <h2>Ziele anpassen</h2>
         <div class="field"><label>Kalorien-Ziel (kcal/Tag)</label><input type="number" inputmode="numeric" id="goalKcal" /></div>
@@ -216,18 +254,8 @@
         <button class="primary" id="saveGoals">Ziele speichern</button>
       </div>
       <div class="card">
-        <h2>Automatisches Kalorienziel</h2>
-        <p class="hint" style="margin-top:0">Rechnet aus deinem Gewichtstrend und dem, was du wirklich gegessen hast, deinen echten Verbrauch — und schlägt ein passendes Ziel vor. Alles lokal.</p>
-        <div class="field"><label>Mein Ziel</label>
-          <select id="goalRate">
-            <option value="-0.75">Abnehmen zügig (−0,75 kg/Woche)</option>
-            <option value="-0.5">Abnehmen (−0,5 kg/Woche)</option>
-            <option value="-0.25">Abnehmen sanft (−0,25 kg/Woche)</option>
-            <option value="0">Gewicht halten</option>
-            <option value="0.25">Aufbauen (+0,25 kg/Woche)</option>
-            <option value="0.5">Aufbauen zügig (+0,5 kg/Woche)</option>
-          </select>
-        </div>
+        <h2>Echter Verbrauch (gemessen)</h2>
+        <p class="hint" style="margin-top:0">Die Formel oben ist ein Startwert. Nach ein paar Wochen rechnet die App aus deinem echten Gewichtsverlauf und dem, was du gegessen hast, deinen tatsächlichen Verbrauch — genauer als jede Formel.</p>
         <div id="adaptBox"></div>
       </div>
       <div class="card">
@@ -238,8 +266,8 @@
         <h2>Backup</h2>
         <p class="hint">Deine Daten liegen nur in <b>diesem Browser</b>. Vor Browser-Wechsel/Handy-Umzug exportieren — und auf dem neuen Gerät importieren.</p>
         <div class="row">
-          <button class="ghost" id="exportBtn">⬇️ Backup exportieren</button>
-          <button class="ghost" id="importBtn">⬆️ Backup importieren</button>
+          <button class="ghost" id="exportBtn">Backup exportieren</button>
+          <button class="ghost" id="importBtn">Backup importieren</button>
         </div>
         <input type="file" accept="application/json" id="importFile" style="display:none" />
       </div>
@@ -284,13 +312,13 @@
       </select>
     </div>
 
-    <button class="primary scanbtn" id="photoFoodBtn" style="margin-bottom:10px">🍽️ Essen fotografieren (KI erkennt Nährwerte)</button>
+    <button class="primary scanbtn" id="photoFoodBtn" style="margin-bottom:10px"><svg class="bi" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="3"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2h3L15 6"/></svg>Essen fotografieren</button>
     <input type="file" accept="image/*" capture="environment" id="foodPhotoInput" style="display:none" />
-    <div class="field" style="margin-bottom:10px"><input id="visionHint" autocomplete="off" placeholder="optional: was ist drauf? (hilft der KI)" /></div>
+    <div class="field" style="margin-bottom:10px"><input id="visionHint" autocomplete="off" placeholder="Optional: was ist drauf? Hilft der KI beim Erkennen" /></div>
     <div id="visionBox"></div>
     <div class="row" style="margin-bottom:10px">
-      <button class="ghost scanbtn" id="scanBtn" style="margin:0">📷 Barcode</button>
-      <button class="ghost scanbtn" id="manualBarcodeBtn" style="margin:0">⌨️ EAN eingeben</button>
+      <button class="ghost scanbtn" id="scanBtn" style="margin:0"><svg class="bi" viewBox="0 0 24 24"><path d="M4 6v12M7 6v12M11 6v12M14 6v12M17 6v12M20 6v12"/></svg>Barcode</button>
+      <button class="ghost scanbtn" id="manualBarcodeBtn" style="margin:0"><svg class="bi" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>EAN eingeben</button>
     </div>
     <div id="reader" style="display:none"></div>
 
