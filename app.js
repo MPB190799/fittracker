@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v22 · 2026-11-23";
+const APP_VERSION = "v23 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -399,19 +399,43 @@ function whoopBonus(date) {
   return extra > 150 ? Math.round(extra * 0.5 / 10) * 10 : 0;
 }
 
+// ---------- Journal automatisch: aus Whoop (Schlaf, Workouts) und deinen Einträgen ----------
+// Manuelles Antippen hat immer Vorrang (gespeichert in journal[d].flags, auch als false).
+const STRENGTH_RX = /weight|strength|functional|power|crossfit|kraft|gym|bodybuild|hiit/i;
+// Wortgrenzen mit Umlauten: verhindert „Schweinebraten“→Wein, „Tomate“→Mate, „Käseplatte“→Latte, „Rumpsteak“→Rum
+const NB = "(?:^|[^a-zäöüß])", NA = "(?![a-zäöüß])"; // ohne Lookbehind: läuft auch auf älterem iOS-Safari
+const ALCOHOL_RX = new RegExp("(bier|wein|sekt|prosecco|champagner|schnaps|likör|cocktail|aperol|spritz|cider)" + NA + "|" + NB + "(pils|radler|wodka|vodka|whisky|whiskey|gin|rum|hugo|ouzo|tequila)" + NA, "i");
+const CAFFEINE_RX = new RegExp("kaffee|espresso|cappuccino|americano|flat white|red bull|monster energy|schwarztee|grüntee|matcha|pre-?workout|" + NB + "(latte|mate|cola|energy|pepsi|club-mate)" + NA, "i");
+function autoFlags(d) {
+  const a = {}, src = {};
+  const next = state.bodyLog[dayOffset(d, 1)], b = state.bodyLog[d];
+  if (next && next.bed) { a.frueh = next.bed >= "18:00" && next.bed < "23:00"; src.frueh = "Whoop: eingeschlafen " + next.bed; }
+  if (next && next.sleepPerf != null) { a.gut = next.sleepPerf >= 85; src.gut = "Whoop: Schlaf " + next.sleepPerf + " %"; }
+  const wos = (b && b.workouts) || [];
+  const kraft = wos.filter(w => STRENGTH_RX.test(w.sport) && (w.min || 0) >= 15), sport = wos.filter(w => !STRENGTH_RX.test(w.sport) && (w.min || 0) >= 15);
+  if (kraft.length) { a.kraft = true; src.kraft = "Whoop: " + kraft.map(w => w.min + " min").join(", "); }
+  if (sport.length) { a.sport = true; src.sport = "Whoop: " + sport.map(w => w.sport + " " + w.min + " min").join(", "); }
+  const es = state.entries.filter(e => e.date === d);
+  const alc = es.filter(e => ALCOHOL_RX.test(e.name) && !/alkoholfrei|0,0|0\.0/i.test(e.name));
+  if (alc.length) { a.alkohol = true; src.alkohol = "eingetragen: " + alc.map(e => e.name).join(", ").slice(0, 60); }
+  const caf = es.filter(e => e.at && e.at >= "15:00" && CAFFEINE_RX.test(e.name) && !/entkoffeiniert|koffeinfrei|zero caff/i.test(e.name));
+  if (caf.length) { a.koffein = true; src.koffein = "eingetragen " + caf[0].at + ": " + caf[0].name; }
+  const late = es.filter(e => e.at && e.at >= "21:00");
+  if (late.length) { a.spaet = true; src.spaet = "eingetragen um " + late[late.length - 1].at; }
+  return { a, src };
+}
+function effFlags(d) {
+  const man = (state.journal[d] && state.journal[d].flags) || {}, { a } = autoFlags(d), out = {};
+  for (const x of JFLAGS) out[x.k] = x.k in man ? !!man[x.k] : !!a[x.k];
+  return out;
+}
+
 // ---------- Krafttraining (über Journal-Flags) ----------
-function trainCount(flag, n) { let c = 0; for (let i = 0; i < n; i++) { const j = state.journal[dayOffset(today(), -i)]; if (j && j.flags && j.flags[flag]) c++; } return c; }
+function trainCount(flag, n) { let c = 0; for (let i = 0; i < n; i++) if (effFlags(dayOffset(today(), -i))[flag]) c++; return c; }
 function renderTrain() {
   const box = $("#trainChips"); if (!box) return;
-  const j = jToday();
   box.innerHTML = "";
-  for (const f of JFLAGS.filter(x => x.k === "kraft" || x.k === "sport")) {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "chip" + (j.flags && j.flags[f.k] ? " on" : "");
-    b.textContent = f.t;
-    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderTrain(); renderJournal(); };
-    box.appendChild(b);
-  }
+  for (const f of JFLAGS.filter(x => x.k === "kraft" || x.k === "sport")) box.appendChild(flagChip(f));
   const k7 = trainCount("kraft", 7);
   const wk = $("#trainWeek"); if (wk) wk.textContent = k7 + "× Kraft / 7 Tage";
   const h = $("#trainHint");
@@ -1371,17 +1395,23 @@ function jToday() { return state.journal[selDate] || J_EMPTY(); }          // nu
 function jTodayW() { return state.journal[selDate] || (state.journal[selDate] = J_EMPTY()); } // schreiben
 // Ein Journal-Tag zählt nur, wenn wirklich etwas eingetragen wurde
 function jLogged(j) { return !!j && (Object.values(j.flags || {}).some(Boolean) || j.mood > 0 || !!(j.note || "").trim()); }
+// Ein Haken: zeigt den wirksamen Wert (manuell vor automatisch); Antippen setzt manuell das Gegenteil
+function flagChip(f) {
+  const eff = effFlags(selDate)[f.k], man = (state.journal[selDate] && state.journal[selDate].flags) || {}, auto = !(f.k in man) && autoFlags(selDate).a[f.k] !== undefined;
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip" + (eff ? " on" : "") + (auto ? " auto" : "");
+  b.textContent = f.t; if (auto) b.title = autoFlags(selDate).src[f.k] || "automatisch";
+  b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !eff; persist(); renderJournal(); renderTrain(); };
+  return b;
+}
 function renderJournal() {
   const box = $("#jflags"); if (!box) return;
   const j = jToday();
   box.innerHTML = "";
-  for (const f of JFLAGS) {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "chip" + (j.flags[f.k] ? " on" : "");
-    b.textContent = f.t;
-    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderJournal(); renderTrain(); };
-    box.appendChild(b);
-  }
+  for (const f of JFLAGS) box.appendChild(flagChip(f));
+  const ah = $("#jAutoHint");
+  if (ah) { const { src } = autoFlags(selDate); const keys = Object.keys(src);
+    ah.innerHTML = keys.length ? "Automatisch: " + keys.map(k => `<b>${esc((JFLAGS.find(x => x.k === k) || {}).t || k)}</b> (${esc(src[k])})`).join(" · ") + ". Antippen überschreibt." : "Früh ins Bett, gut geschlafen und Training füllt die App morgen früh aus Whoop; Alkohol, Koffein und spätes Essen aus deinen Einträgen."; }
   const mood = $("#jmood");
   if (mood) {
     mood.innerHTML = "";
@@ -1409,14 +1439,23 @@ async function loadHistory(force) {
       if (d && d.days) {
         for (const day of d.days) {
           const prev = state.bodyLog[day.date] || {};
-          state.bodyLog[day.date] = { ...prev, recovery: day.recovery, hrv: day.hrv, rhr: day.rhr, sleepH: day.sleepH, sleepPerf: day.sleepPerf, strain: day.strain };
+          const { date, ...rest } = day;
+          state.bodyLog[day.date] = { ...prev, ...rest };
         }
+        needsWorkoutScope = !!d.needsWorkoutScope;
         persist();
       }
     } catch {}
   }
   drawTrend(); renderInsights(); renderSuppInsights(); renderWeekReport();
+  renderJournal(); renderTrain(); renderReconnect();
 }
+let needsWorkoutScope = false;
+function renderReconnect() {
+  const el = $("#whoopReconnect"); if (!el) return;
+  el.style.display = needsWorkoutScope ? "block" : "none";
+}
+on("#whoopReconnectBtn", "click", () => { const k = whoopKey(); if (k) window.location.href = WHOOP_WORKER + "/auth/start?key=" + encodeURIComponent(k); });
 function bodyDays(n) {
   return Object.keys(state.bodyLog).sort().slice(-n).map(date => ({ date, ...state.bodyLog[date] }));
 }
@@ -1446,7 +1485,7 @@ function drawTrend() {
 // Früher wurde Tag D mit der Erholung von Tag D verglichen — Alkohol am Abend wirkt aber erst in der Nacht danach.
 function dayLogged(d) { return state.entries.some(e => e.date === d) || jLogged(state.journal[d]) || (state.suppLog[d] && Object.values(state.suppLog[d]).some(Boolean)); }
 function dayFeatures(d) {
-  const f = {}, j = state.journal[d] || {}, flags = j.flags || {};
+  const f = {}, flags = effFlags(d);
   for (const x of JFLAGS) if (x.k !== "gut") f["j:" + x.k] = !!flags[x.k];
   const es = state.entries.filter(e => e.date === d);
   if (es.some(e => e.at && e.at >= "21:00")) f["j:spaet"] = true; // spät gegessen automatisch aus der Uhrzeit
@@ -1725,7 +1764,7 @@ try {
   renderAll();
   maybeOnboard();
   // Whoop beim Start still im Hintergrund laden → „Heute · Körper“ im Tagebuch ist sofort aktuell
-  if (whoopKey()) loadWhoop().then(renderTodayBody).catch(() => {});
+  if (whoopKey()) { loadWhoop().then(renderTodayBody).catch(() => {}); loadHistory().catch(() => {}); }
   // Rückkehr vom Whoop-Login → direkt zum Körper-Tab
   if (location.search.indexOf("whoop=ok") >= 0) {
     switchTab("body");

@@ -75,4 +75,20 @@ const gk = env.GROQ_API_KEY; delete env.GROQ_API_KEY;
 d = await call("/vision/food", { method: "POST", body: JSON.stringify({ image: img }) });
 ok(!d.ok && d.error === "cf_limit", "ohne Groq-Key → cf_limit");
 env.GROQ_API_KEY = gk; delete env.AI;
+
+// 8) Historie mit Workouts + Einschlafzeit (Ortszeit)
+globalThis.fetch = async (u) => {
+  u = String(u);
+  if (u.includes("/v2/cycle")) return new Response(JSON.stringify({ records: [] }));
+  if (u.includes("/v2/recovery")) return new Response(JSON.stringify({ records: [] }));
+  if (u.includes("/v2/activity/sleep")) return new Response(JSON.stringify({ records: [{ start: "2026-11-21T21:40:00.000Z", end: "2026-11-22T05:50:00.000Z", timezone_offset: "+01:00", nap: false, score: { sleep_performance_percentage: 88, stage_summary: {} } }] }));
+  if (u.includes("/v2/activity/workout")) return new Response(JSON.stringify({ records: [{ start: "2026-11-22T17:00:00.000Z", end: "2026-11-22T18:15:00.000Z", timezone_offset: "+01:00", sport_name: "weightlifting", score: { strain: 9.84 } }] }));
+  return new Response("{}");
+};
+d = await call("/whoop/history?days=3");
+const d22 = (d.days || []).find(x => x.date === "2026-11-22") || {};
+ok(d22.bed === "22:40" && d22.wake === "06:50" && d22.workouts && d22.workouts[0].min === 75 && d22.workouts[0].sport === "weightlifting" && d.needsWorkoutScope === false, "Historie: Einschlafen 22:40, Krafttraining 75 min");
+globalThis.fetch = async (u) => String(u).includes("/workout") ? new Response("{}", { status: 403 }) : new Response(JSON.stringify({ records: [] }));
+d = await call("/whoop/history?days=3");
+ok(d.needsWorkoutScope === true, "fehlende Workout-Berechtigung wird erkannt");
 process.exitCode = fails ? 1 : 0;

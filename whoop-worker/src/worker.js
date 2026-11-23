@@ -7,7 +7,7 @@
 const WHOOP_AUTH = "https://api.prod.whoop.com/oauth/oauth2/auth";
 const WHOOP_TOKEN = "https://api.prod.whoop.com/oauth/oauth2/token";
 const WHOOP_API = "https://api.prod.whoop.com/developer";
-const SCOPES = "offline read:recovery read:sleep read:cycles read:profile";
+const SCOPES = "offline read:recovery read:sleep read:cycles read:profile read:workout";
 
 function corsHeaders(origin, env) {
   const allowed = [env.APP_ORIGIN, "http://localhost:8099"];
@@ -140,10 +140,11 @@ export default {
       catch (e) { return json({ connected: false }, 200, ch); }
       const h = { Authorization: "Bearer " + access };
       const lim = Math.min(25, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10)));
-      const [rec, slp, cyc] = await Promise.all([
+      const [rec, slp, cyc, wo] = await Promise.all([
         fetchJson(WHOOP_API + "/v2/recovery?limit=" + lim, h),
         fetchJson(WHOOP_API + "/v2/activity/sleep?limit=" + lim, h),
-        fetchJson(WHOOP_API + "/v2/cycle?limit=" + lim, h)
+        fetchJson(WHOOP_API + "/v2/cycle?limit=" + lim, h),
+        fetchJsonS(WHOOP_API + "/v2/activity/workout?limit=25", h)
       ]);
       // Tageszuordnung: Ein Whoop-Zyklus läuft von Einschlafen zu Einschlafen. Früher wurde das
       // UTC-Startdatum genommen → wer vor Mitternacht einschläft, bekam Strain/Recovery auf den
@@ -164,14 +165,25 @@ export default {
         const stg = s.score.stage_summary || {};
         const asleep = (stg.total_light_sleep_time_milli || 0) + (stg.total_slow_wave_sleep_time_milli || 0) + (stg.total_rem_sleep_time_milli || 0);
         const o = get(d); o.sleepPerf = num(s.score.sleep_performance_percentage); o.sleepH = hrs(asleep);
+        o.bed = localTime(s.start, s.timezone_offset); o.wake = localTime(s.end, s.timezone_offset); // fürs Journal „früh ins Bett“
       }
       for (const r of (rec.records || [])) {
         if (!r.score) continue;
         const d = cycDay[r.cycle_id] || localDay(r.created_at, null, 0); if (!d) continue;
         const o = get(d); o.recovery = num(r.score.recovery_score); o.hrv = r.score.hrv_rmssd_milli != null ? Math.round(r.score.hrv_rmssd_milli) : null; o.rhr = num(r.score.resting_heart_rate);
       }
+      // Workouts (Scope read:workout — fehlt er, muss Marco Whoop einmal neu verbinden)
+      const needsWorkoutScope = wo.status === 401 || wo.status === 403;
+      for (const w of ((wo.data && wo.data.records) || [])) {
+        const d = localDay(w.start, w.timezone_offset, 0); if (!d) continue;
+        const min = w.start && w.end ? Math.round((Date.parse(w.end) - Date.parse(w.start)) / 60000) : null;
+        const o = get(d); (o.workouts || (o.workouts = [])).push({
+          sport: w.sport_name || (w.sport_id != null ? "Sport " + w.sport_id : "Workout"), min,
+          strain: w.score && w.score.strain != null ? Math.round(w.score.strain * 10) / 10 : null
+        });
+      }
       const days = Object.values(day).sort((a, b) => a.date.localeCompare(b.date));
-      return json({ connected: true, days }, 200, ch);
+      return json({ connected: true, days, needsWorkoutScope }, 200, ch);
     }
 
     // 6) Foto → Essen erkennen — Bild rein, Nährwerte raus
@@ -224,6 +236,12 @@ export default {
 };
 
 function num(v) { return v != null ? Math.round(v) : null; }
+function localTime(iso, offset) { // ISO → "HH:MM" in Ortszeit
+  const t = Date.parse(iso || ""); if (isNaN(t)) return null;
+  let offMin = 60; const m = /^([+-])(\d{2}):?(\d{2})$/.exec(offset || "");
+  if (m) offMin = (m[1] === "-" ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+  return new Date(t + offMin * 60000).toISOString().slice(11, 16);
+}
 // ISO-Zeit → lokales Datum (YYYY-MM-DD) per Whoop-timezone_offset ("+01:00"), plus shiftH Stunden.
 // Ohne Offset: Europe/Berlin-Näherung +1 h (Marco sitzt dort), besser als nacktes UTC.
 function localDay(iso, offset, shiftH) {
@@ -405,6 +423,10 @@ async function getAccessToken(env) {
   return t2.access_token;
 }
 
+async function fetchJsonS(u, h) { // wie fetchJson, aber mit Status (um fehlende Berechtigungen zu erkennen)
+  try { const r = await fetch(u, { headers: h }); return { status: r.status, data: r.ok ? await r.json() : null }; }
+  catch { return { status: 0, data: null }; }
+}
 async function fetchJson(u, h) {
   try { const r = await fetch(u, { headers: h }); if (!r.ok) return { records: [] }; return await r.json(); }
   catch { return { records: [] }; }

@@ -220,5 +220,27 @@ const reis = ve.find(x => x[0] === "Reis");
 ve.length === 2 && reis && reis[1] === 250 && reis[2] === 325 && /573 kcal/.test(btn)
   ? ok("Foto-Prüfliste: Mais entfernt, Reis 250 g / 325 kcal, 2 Einträge übernommen") : fail("Prüfliste: " + JSON.stringify(ve) + " | " + btn);
 
+// 19) Journal automatisch: Whoop (Einschlafen, Workout) + Einträge (Alkohol, Koffein spät) — ohne Fehlalarme
+const af = await page.evaluate(() => {
+  const d = dayOffset(today(), -3), n = dayOffset(d, 1);
+  state.journal = {}; state.bodyLog[d] = { workouts: [{ sport: "Weightlifting", min: 60, strain: 9 }, { sport: "Badminton", min: 90, strain: 12 }] };
+  state.bodyLog[n] = { bed: "22:30", sleepPerf: 88 };
+  state.entries = state.entries.filter(e => e.date !== d).concat([
+    { id: "a1", date: d, meal: "abend", name: "Rotwein", grams: 200, kcal: 170, protein: 0, carbs: 5, fat: 0, at: "20:00" },
+    { id: "a2", date: d, meal: "mittag", name: "Schweinebraten", grams: 200, kcal: 400, protein: 40, carbs: 0, fat: 25, at: "12:00" },
+    { id: "a3", date: d, meal: "snack", name: "Espresso", grams: 30, kcal: 1, protein: 0, carbs: 0, fat: 0, at: "16:10" },
+    { id: "a4", date: d, meal: "snack", name: "Tomate", grams: 100, kcal: 18, protein: 1, carbs: 4, fat: 0, at: "17:00" } ]);
+  persist(); return effFlags(d);
+});
+af.frueh && af.gut && af.kraft && af.sport && af.alkohol && af.koffein && !af.spaet ? ok("Auto-Journal: früh ins Bett, gut geschlafen, Kraft, Sport, Alkohol, Koffein spät erkannt") : fail("Auto: " + JSON.stringify(af));
+const noFalse = await page.evaluate(() => { const d = dayOffset(today(), -4); state.entries.push({ id: "b1", date: d, meal: "mittag", name: "Schweinebraten mit Tomate und Käseplatte", grams: 300, kcal: 600, protein: 40, carbs: 10, fat: 40, at: "18:00" }); return effFlags(d); });
+!noFalse.alkohol && !noFalse.koffein ? ok("Keine Fehlalarme (Schweinebraten, Tomate, Käseplatte)") : fail("Fehlalarm: " + JSON.stringify(noFalse));
+// Manuelles Überschreiben: Krafttraining war auto an → antippen → aus
+await page.evaluate(() => { selDate = dayOffset(today(), -3); refreshDate(); });
+await page.click('nav.tabs button[data-tab="body"]');
+await page.click('#jflags .chip:has-text("Krafttraining")');
+(await page.evaluate(() => effFlags(dayOffset(today(), -3)).kraft)) === false ? ok("Antippen überschreibt Automatik") : fail("Override");
+await page.evaluate(() => { selDate = today(); refreshDate(); });
+
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();

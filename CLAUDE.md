@@ -43,6 +43,10 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   gegessen“ aus Eintrags-Uhrzeit `at` ≥ 21:00, Supplements, Eiweiß/Zucker/Ballaststoffe/Wasser/über kcal) ↔ Schlaf
   & Erholung an D+1. Min. 3 Tage mit/ohne, ≥ 6 Nächte gesamt; Phasentage ausgenommen. Lebenskompass-Habits
   (Lesen, früh ins Bett) später per Sync statt Haken.
+- Journal automatisch (`autoFlags`/`effFlags`): früh ins Bett (Whoop-Einschlafzeit der Folgenacht < 23:00), gut
+  geschlafen (Schlaf ≥ 85 %), Kraft/Sport (Whoop-Workouts ≥ 15 min, Scope `read:workout`), Alkohol/Koffein ab 15 Uhr/
+  spät gegessen aus Einträgen (Wortgrenzen ohne Lookbehind — älteres iOS-Safari!). Manuell (`journal[d].flags`,
+  auch false) hat Vorrang.
 - Whoop-Bonus (`whoopBonus`): Whoop-Tagesverbrauch über Plan-/Messverbrauch → 50 % davon ins Tagesziel (abschaltbar).
 - Wochen-Check (`checkinSuggestion`): alle 7 Tage neues kcal-Ziel vorschlagen (Messung, sonst Formel).
 - Backup (`doBackup`): Teilen-Menü (→ OneDrive), sonst Download; Erinnerung nach 7 Tagen (`fittracker:lastBackup`).
@@ -68,6 +72,11 @@ python3 -m http.server 8099 & node tests/smoke.mjs # Browser-Smoke-Test (braucht
 ```
 Läuft automatisch per GitHub Action `.github/workflows/check.yml` bei jedem Push.
 Neue Bugs → zuerst einen Test schreiben, der ihn zeigt, dann fixen.
+
+## Zusammenarbeit
+- Andere Claude-Sitzungen (z. B. Lebenskompass) pushen ebenfalls auf `master` → vor jedem Push
+  `git fetch --depth=50 origin master && git rebase origin/master`, Versionsnummern bei Konflikt hochzählen.
+- Lebenskompass-Übergabe: Link `#toLK` → `lebenskompassLink()` (nur #-Teil der Adresse, kein Server).
 
 ## Deploy
 - App: Push auf `master` → GitHub Pages.

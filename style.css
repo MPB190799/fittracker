@@ -380,3 +380,9 @@ nav.tabs button.active::before { content: ""; position: absolute; top: -9px; wid
 .vmac { font-size: 13px; color: var(--muted); text-align: right; }
 .vmac b { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .vunsure { color: var(--gold); }
+
+/* automatisch gesetzte Haken */
+.chip.auto { position: relative; }
+.chip.auto::after { content: "auto"; position: absolute; top: -7px; right: 6px; font-size: 9px; font-weight: 600; letter-spacing: .3px; padding: 0 5px; border-radius: 999px; background: #22223a; color: var(--muted); border: 1px solid var(--line2); }
+.chip.auto.on::after { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+#jAutoHint b { color: var(--text); font-weight: 500; }
