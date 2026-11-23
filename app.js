@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v16 · 2026-11-23";
+const APP_VERSION = "v17 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -114,7 +114,7 @@ const PORTIONS = [
 
 const DEFAULT = {
   profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0,
-    heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null },
+    heightCm: null, birthYear: null, sex: "m", activity: 1.375, goalWeight: null, goalMode: "rec" },
   entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {}, // { "2026-06-11": { suppId: true } }
@@ -330,7 +330,21 @@ function renderTemplatesList() {
 // ---------- Körper & Ziel: Startwert per Formel (Mifflin-St Jeor) ----------
 // Grundumsatz = 10×kg + 6,25×cm − 5×Alter + 5 (Mann) bzw. −161 (Frau); × Aktivitätsfaktor = Verbrauch.
 // Defizit/Überschuss = Tempo (kg/Woche) × 7700 / 7. Nie unter den Grundumsatz und nie unter 1500/1200 kcal.
-function bodyPlan() {
+// Stufen in % Körpergewicht pro Woche (Sporternährung: 0,5–1 %/Woche; NHS/NICE: max. ~1 kg/Woche)
+const CUT_MODES = { light: { t: "Leichter Cut", pct: 0.005 }, rec: { t: "Empfohlen", pct: 0.0075 }, hard: { t: "Krasser Cut", pct: 0.01 } };
+const BULK_MODES = { light: { t: "Leichter Aufbau", pct: 0.001 }, rec: { t: "Empfohlen", pct: 0.0025 }, hard: { t: "Zügiger Aufbau", pct: 0.005 } };
+function planDir() { // −1 abnehmen, +1 aufbauen, 0 halten
+  const w = latestWeight(), gw = Number(state.profile.goalWeight) || 0;
+  if (!w || !gw || Math.abs(gw - w) < 0.5) return 0;
+  return gw < w ? -1 : 1;
+}
+function planRate(mode) { // kg/Woche (negativ = abnehmen)
+  const w = latestWeight(), dir = planDir(); if (!dir) return 0;
+  const m = (dir < 0 ? CUT_MODES : BULK_MODES)[mode || state.profile.goalMode || "rec"] || CUT_MODES.rec;
+  let kg = m.pct * w; if (dir < 0) kg = Math.min(kg, 1.0);
+  return Math.round(dir * kg * 100) / 100;
+}
+function bodyPlan(modeOverride) {
   const P = state.profile, w = latestWeight();
   const h = Number(P.heightCm), by = Number(P.birthYear), act = Number(P.activity) || 1.375;
   const need = [];
@@ -342,13 +356,14 @@ function bodyPlan() {
   const bmr = Math.round(10 * w + 6.25 * h - 5 * age + (P.sex === "w" ? -161 : 5));
   const tdee = Math.round(bmr * act);
   const gw = Number(P.goalWeight) || null;
-  let rate = Number(P.goalRate) || 0;
-  let warn = "";
-  if (gw && rate && Math.sign(gw - w) !== Math.sign(rate)) warn = gw < w ? "Dein Zielgewicht liegt unter deinem Gewicht — wähle beim Tempo „Abnehmen“." : "Dein Zielgewicht liegt über deinem Gewicht — wähle beim Tempo „Aufbauen“ oder „halten“.";
-  const floor = Math.max(bmr, P.sex === "w" ? 1200 : 1500);
+  const rate = planRate(modeOverride);
+  const warn = "";
+  // Untergrenze: 1500 (Mann) / 1200 (Frau) kcal — übliche Grenze für Diäten ohne ärztliche Begleitung
+  const floor = P.sex === "w" ? 1200 : 1500;
   let kcal = Math.round((tdee + rate * KCAL_PER_KG / 7) / 10) * 10;
   let floored = false;
-  if (kcal < floor) { kcal = Math.ceil(floor / 10) * 10; floored = true; }
+  if (kcal < floor) { kcal = floor; floored = true; }
+  const belowBmr = kcal < bmr;
   const realRate = Math.round((kcal - tdee) * 7 / KCAL_PER_KG * 100) / 100; // kg/Woche nach Boden-Korrektur
   let eta = null;
   if (gw && realRate && Math.sign(gw - w) === Math.sign(realRate)) {
@@ -361,16 +376,32 @@ function bodyPlan() {
   const fat = Math.round(Math.max(0.8 * protBase, kcal * 0.25 / 9));
   const carbs = Math.max(0, Math.round((kcal - protein * 4 - fat * 9) / 4));
   const bmi = Math.round(w / ((h / 100) ** 2) * 10) / 10;
-  return { ok: true, w, age, bmr, tdee, kcal, floored, realRate, eta, protein, fat, carbs, gw, warn, bmi };
+  return { ok: true, w, age, bmr, tdee, kcal, floored, belowBmr, realRate, eta, protein, fat, carbs, gw, warn, bmi };
 }
 function fillPlanInputs() {
   const P = state.profile, set = (id, v) => { const el = $("#" + id); if (el && document.activeElement !== el) el.value = v == null ? "" : v; };
   set("pHeight", P.heightCm); set("pBirth", P.birthYear); set("pSex", P.sex || "m");
-  set("pAct", String(P.activity || 1.375)); set("pGoalW", P.goalWeight); set("goalRate", String(P.goalRate || 0));
+  set("pAct", String(P.activity || 1.375)); set("pGoalW", P.goalWeight);
+}
+function renderModes() {
+  const box = $("#planModes"), lbl = $("#modeLbl"); if (!box) return;
+  const dir = planDir();
+  if (!dir) { box._html = ""; box.innerHTML = `<p class="hint" style="margin:0">Trag ein Zielgewicht ein — dann kannst du wählen, wie stark du abnehmen oder aufbauen willst. Ohne Ziel rechnet die App mit „Gewicht halten“.</p>`; if (lbl) lbl.textContent = "Wie stark?"; return; }
+  if (lbl) lbl.textContent = dir < 0 ? "Wie stark willst du cutten?" : "Wie schnell willst du aufbauen?";
+  const modes = dir < 0 ? CUT_MODES : BULK_MODES, cur = state.profile.goalMode || "rec";
+  const html = ["light", "rec", "hard"].map(k => {
+    const p = bodyPlan(k), r = planRate(k);
+    const kc = p.ok ? p.kcal + " kcal" : "–";
+    return `<button type="button" class="mode${k === cur ? " on" : ""}${k === "rec" ? " rec" : ""}" data-mode="${k}">
+      <span class="mode-t">${modes[k].t}</span><span class="mode-k">${kc}</span><span class="mode-r">${r > 0 ? "+" : "−"}${Math.abs(r).toLocaleString("de-DE")} kg/Woche</span></button>`;
+  }).join("");
+  if (box._html !== html) { box.innerHTML = html; box._html = html; } // kein Neuzeichnen beim Antippen (siehe renderPlan)
+  box.querySelectorAll(".mode").forEach(b => b.onclick = () => { state.profile.goalMode = b.dataset.mode; persist(); renderPlan(); renderAdaptive(); });
 }
 function renderPlan() {
   const box = $("#planBox"); if (!box) return;
   fillPlanInputs();
+  renderModes();
   const r = bodyPlan();
   if (!r.ok) { box.innerHTML = `<p class="hint">Für deinen Vorschlag fehlt noch: <b>${r.need.join(", ")}</b>.</p>`; box._html = ""; return; }
   const fmt = (n) => Math.round(n).toLocaleString("de-DE");
@@ -382,7 +413,7 @@ function renderPlan() {
       <div class="bcard"><div class="bval">${r.carbs}</div><div class="blbl">Kohlenh. g</div></div>
       <div class="bcard"><div class="bval">${r.fat}</div><div class="blbl">Fett g</div></div>
     </div>
-    <p class="hint">Grundumsatz ${fmt(r.bmr)} kcal · Verbrauch mit Alltag ${fmt(r.tdee)} kcal · BMI ${r.bmi.toLocaleString("de-DE")} · ${r.w.toLocaleString("de-DE")} kg, ${r.age} Jahre.${r.floored ? " <b>Gewähltes Tempo wäre unter deinem Grundumsatz — auf den sicheren Wert angehoben.</b>" : ""}</p>
+    <p class="hint">Grundumsatz ${fmt(r.bmr)} kcal · Verbrauch mit Alltag ${fmt(r.tdee)} kcal · BMI ${r.bmi.toLocaleString("de-DE")} · ${r.w.toLocaleString("de-DE")} kg, ${r.age} Jahre.${r.floored ? ` <b>Auf die Untergrenze von ${r.kcal} kcal angehoben — schneller geht es nicht vernünftig.</b>` : r.belowBmr ? " Du isst damit unter deinem Grundumsatz — für einen Cut okay, achte auf genug Eiweiß und Krafttraining, damit vor allem Fett schmilzt." : ""}</p>
     ${r.warn ? `<p class="hint" style="color:var(--red)">${r.warn}</p>` : ""}
     <button class="primary" id="planApply">Als meine Tagesziele übernehmen</button>`;
   // Nur neu zeichnen, wenn sich wirklich etwas geändert hat — sonst geht ein Tipp auf „Übernehmen“
@@ -436,14 +467,13 @@ function adaptiveEstimate() {
   const intake = days.reduce((a, k) => a + k, 0) / days.length;
   const slopeKgDay = linSlope(ws.map(w => ({ x: dnum(w.date), y: w.kg })));
   const tdee = intake - slopeKgDay * KCAL_PER_KG;
-  const rate = Number(state.profile.goalRate) || 0; // kg/Woche
+  const rate = planRate(); // kg/Woche, aus Zielgewicht + gewählter Stufe
   let target = tdee + rate * KCAL_PER_KG / 7;
   target = Math.round(Math.max(1400, target) / 10) * 10; // Sicherheitsboden, auf 10 gerundet
   return { ok: true, intake: Math.round(intake), tdee: Math.round(tdee), trendWeek: Math.round(slopeKgDay * 7 * 100) / 100, target, loggedDays: days.length, weighIns: ws.length };
 }
 function renderAdaptive() {
   const box = $("#adaptBox"); if (!box) return;
-  const sel = $("#goalRate"); if (sel) sel.value = String(state.profile.goalRate || 0);
   const r = adaptiveEstimate();
   if (!r.ok) {
     box.innerHTML = `<p class="hint">Noch zu wenig Daten (letzte ${ADAPT_DAYS} Tage: ${r.loggedDays} Tage geloggt, ${r.weighIns} Wiegungen). Es fehlen: <b>${r.need.join(" und ")}</b>.</p>`;
@@ -460,7 +490,7 @@ function renderAdaptive() {
   const b = $("#adaptApply");
   if (b) b.onclick = () => { state.profile.kcalTarget = r.target; persist(); fillGoals(); renderDiary(); renderAdaptive(); };
 }
-on("#goalRate", "change", (e) => { state.profile.goalRate = Number(e.target.value) || 0; persist(); renderAdaptive(); renderPlan(); });
+
 
 function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
 

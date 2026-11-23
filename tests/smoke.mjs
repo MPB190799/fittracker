@@ -79,11 +79,15 @@ await page.click('nav.tabs button[data-tab="goals"]');
 const adapt = await page.textContent("#adaptBox");
 const m = adapt.match(/(\d{4})\s*Verbrauch/);
 m && Math.abs(+m[1] - 3050) <= 20 ? ok("Kalorienziel: Verbrauch " + m[1] + " kcal (erwartet ≈3050)") : fail("Adaptiv: " + adapt.slice(0, 160));
-await page.selectOption("#goalRate", "-0.5");
+await page.fill("#pGoalW", "80"); await page.dispatchEvent("#pGoalW", "change");
+await page.click('#planModes .mode[data-mode="light"]');
+const rate7 = await page.evaluate(() => planRate());
 const adapt2 = await page.textContent("#adaptBox");
-/2500\s*Vorschlag/.test(adapt2) ? ok("−0,5 kg/Woche → Vorschlag 2500 kcal") : fail("Adaptiv −0,5: " + adapt2.slice(0, 160));
+const exp7 = Math.round((3050 + rate7 * 1100) / 10) * 10;
+const got7 = +(adapt2.match(/(\d{4})\s*Vorschlag/) || [])[1];
+Math.abs(got7 - exp7) <= 10 && rate7 < 0 && (await page.evaluate(() => JSON.parse(localStorage.getItem("fittracker:db")).profile.goalMode)) === "light" ? ok(`Leichter Cut (${rate7} kg/Woche) → Vorschlag ${got7} kcal`) : fail("Adaptiv leicht: " + adapt2.slice(0, 160));
 await page.click("#adaptApply");
-(await page.evaluate(() => JSON.parse(localStorage.getItem("fittracker:db")).profile.kcalTarget)) === 2500 ? ok("Vorschlag übernommen") : fail("nicht übernommen");
+(await page.evaluate(() => JSON.parse(localStorage.getItem("fittracker:db")).profile.kcalTarget)) === got7 ? ok("Vorschlag übernommen") : fail("nicht übernommen");
 
 // 8) Körper & Ziel (Mifflin-St Jeor): 110 kg, 185 cm, Mann, Sitzjob + 1–3× Sport, Ziel 90 kg, −0,5 kg/Woche
 await page.evaluate(() => { const db = JSON.parse(localStorage.getItem("fittracker:db")); db.weights.push({ id: "wx", date: new Date().toLocaleDateString("sv-SE"), kg: 110 }); localStorage.setItem("fittracker:db", JSON.stringify(db)); });
@@ -93,19 +97,23 @@ await page.fill("#pHeight", "185"); await page.dispatchEvent("#pHeight", "change
 await page.fill("#pBirth", "1999"); await page.dispatchEvent("#pBirth", "change");
 await page.selectOption("#pAct", "1.375");
 await page.fill("#pGoalW", "90"); await page.dispatchEvent("#pGoalW", "change");
-await page.selectOption("#goalRate", "-0.5");
+await page.click('#planModes .mode[data-mode="rec"]');
 const age = new Date().getFullYear() - 1999, bmr = Math.round(10 * 110 + 6.25 * 185 - 5 * age + 5);
-const expKcal = Math.round((Math.round(bmr * 1.375) - 550) / 10) * 10;
+const rate8 = await page.evaluate(() => planRate());
+const expKcal = Math.max(1500, Math.round((Math.round(bmr * 1.375) + rate8 * 1100) / 10) * 10);
 const plan = await page.textContent("#planBox");
 const num = +(plan.match(/([\d.]+)\s*kcal pro Tag/) || [])[1]?.replace(".", "");
-num === expKcal && /180\s*Eiweiß/.test(plan) ? ok(`Ziel-Rechnung: ${num} kcal, 180 g Eiweiß (aufs Zielgewicht)`) : fail(`Plan: erwartet ${expKcal}: ` + plan.slice(0, 200));
+num === expKcal && /180\s*Eiweiß/.test(plan) ? ok(`Empfohlener Cut (${rate8} kg/Woche): ${num} kcal, 180 g Eiweiß`) : fail(`Plan: erwartet ${expKcal}: ` + plan.slice(0, 200));
 await page.click("#planApply");
 { const kt = await page.evaluate(() => JSON.parse(localStorage.getItem("fittracker:db")).profile.kcalTarget); kt === expKcal ? ok("Plan als Tagesziel übernommen") : fail("Plan nicht übernommen: " + kt + " statt " + expKcal); }
-// Untergrenze: zu schnelles Tempo darf nicht unter den Grundumsatz fallen
-await page.selectOption("#pAct", "1.2"); await page.selectOption("#goalRate", "-1");
+// Stufen: Krass < Empfohlen < Leicht, und nie unter 1500 kcal
+const kc = async (m) => { await page.click(`#planModes .mode[data-mode="${m}"]`); const t = await page.textContent("#planBox"); return +(t.match(/([\d.]+)\s*kcal pro Tag/) || [])[1]; };
+const [kl, kr, kh] = [await kc("light"), await kc("rec"), await kc("hard")];
+kh < kr && kr < kl ? ok(`Stufen: leicht ${kl} · empfohlen ${kr} · krass ${kh} kcal`) : fail(`Stufen falsch: ${kl}/${kr}/${kh}`);
+await page.selectOption("#pAct", "1.2");
 const plan2 = await page.textContent("#planBox");
 const num2 = +(plan2.match(/([\d.]+)\s*kcal pro Tag/) || [])[1]?.replace(".", "");
-num2 >= bmr ? ok(`Sicherheits-Untergrenze greift (${num2} ≥ Grundumsatz ${bmr})`) : fail("unter Grundumsatz: " + num2);
+num2 >= 1500 ? ok(`Untergrenze gehalten (${num2} kcal ≥ 1500)`) : fail("unter 1500: " + num2);
 
 errors.length ? fail("JS-Fehler: " + errors.join(" | ")) : ok("keine JS-Fehler");
 await browser.close();

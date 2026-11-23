@@ -27,8 +27,9 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
 - Vision-Modelle verschwinden ohne Vorwarnung → Listen `CF_VISION_MODELS` (developers.cloudflare.com/workers-ai/models)
   und `GROQ_VISION_MODELS` (console.groq.com/docs/vision) prüfen; umstellbar per Worker-Variable
   `CF_VISION_MODEL` / `GROQ_VISION_MODEL`. Keine multimodalen Llama-Modelle (Meta-Lizenz schließt EU aus).
-- Körper & Ziel (`bodyPlan`): Mifflin-St Jeor × Aktivitätsfaktor ± Tempo×7700/7; nie unter Grundumsatz bzw.
-  1500 (Mann)/1200 (Frau). Eiweiß bei Abnehmziel auf Zielgewicht bezogen.
+- Körper & Ziel (`bodyPlan`): Mifflin-St Jeor × Aktivitätsfaktor ± Tempo×7700/7. Tempo aus Zielgewicht-Richtung +
+  Stufe (`CUT_MODES`/`BULK_MODES`, % Körpergewicht/Woche; Cut max. 1 kg/Woche). Untergrenze 1500 (Mann)/1200 (Frau)
+  kcal; unter Grundumsatz nur Hinweis. Eiweiß bei Abnehmziel auf Zielgewicht bezogen.
 - Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
   Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 
