@@ -1,0 +1,45 @@
+# FitTracker — Kontext für Coding-Agenten
+
+Marcos persönliche Fitness-App: Ernährung, Supplements, Wasser, Gewicht, Progress-Fotos, Journal und
+Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptgerät, Sprache Deutsch.
+
+## Architektur
+- **PWA, 100 % statisch** auf GitHub Pages (`https://mpb190799.github.io/fittracker/`, Branch `master`).
+  Vanilla JS/HTML/CSS, kein Build, keine Frameworks. Dateien: `index.html`, `app.js`, `style.css`, `sw.js`.
+- **Daten lokal**: `localStorage` Key `fittracker:db` (Form siehe `DEFAULT` in app.js) + IndexedDB für Fotos.
+  Jede Änderung an der Datenform muss in `normalizeState()` abgesichert werden (alte Backups!).
+- **Cloudflare Worker** `whoop-worker/` (`fittracker-whoop.mbcapitalstrategies.workers.dev`):
+  Whoop-OAuth + Token-Refresh (KV `TOKENS`), `/whoop/today`, `/whoop/history`,
+  `/food/search` (OFF-Proxy, wegen CORS), `/vision/food` (Groq Vision, ~0,1 Cent/Foto).
+  Auth der App gegenüber dem Worker: Header `X-App-Token` = Secret `APP_TOKEN`.
+  Secrets nur per `wrangler secret put` (`WHOOP_CLIENT_SECRET`, `APP_TOKEN`, `GROQ_API_KEY`), nie ins Repo.
+
+## Regeln
+- Alles, was lokal und kostenlos geht, direkt umsetzen. Alles mit laufenden Kosten (neue APIs, KI-Calls,
+  bezahlte Dienste) vorher mit Marco abstimmen.
+- Datenschutz ist ein Kernziel: keine neuen Drittanbieter ohne Rückfrage; Daten bleiben lokal.
+- iOS-Safari-robust bleiben: kein `structuredClone` im Hot-Path, Fehler sichtbar über `#errbar`.
+- Nur LESEN darf keinen State anlegen (Lehre aus Bug 11/2026: leere Journal-/Supplement-Tage verzerrten
+  die Auswertungen). Schreib-Helfer: `jTodayW()`, `suppTakenMapW()`.
+- Whoop-Tage: Zyklus = Einschlafen→Einschlafen; Zuordnung über `localDay()` im Worker, nie UTC-Datum.
+- Bei jeder Änderung `APP_VERSION` (app.js) und `CACHE` (sw.js) hochzählen, sonst klebt die alte Version.
+- Groq-Vision-Modelle verschwinden ohne Vorwarnung → Liste `GROQ_VISION_MODELS` gegen
+  https://console.groq.com/docs/vision prüfen; schnell umstellbar per Worker-Variable `GROQ_VISION_MODEL`.
+
+## Prüfen (Definition of Done)
+```bash
+node --check app.js && node --check whoop-worker/src/worker.js
+node tests/worker.test.mjs                         # Worker-Logik, alles gemockt
+python3 -m http.server 8099 & node tests/smoke.mjs # Browser-Smoke-Test (braucht playwright)
+```
+Läuft automatisch per GitHub Action `.github/workflows/check.yml` bei jedem Push.
+Neue Bugs → zuerst einen Test schreiben, der ihn zeigt, dann fixen.
+
+## Deploy
+- App: Push auf `master` → GitHub Pages.
+- Worker: `cd whoop-worker && npx wrangler deploy` — oder automatisch per Action, sobald die
+  Repo-Secrets `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) gesetzt sind.
+
+## Roadmap (offen)
+Siehe `PLAN.md`. Größter strategischer Punkt: Whoop langfristig durch eigenen Brustgurt (Polar H10)
+ersetzen — Körper-Tab soll dann eine zweite Datenquelle bekommen, nicht nur Whoop.

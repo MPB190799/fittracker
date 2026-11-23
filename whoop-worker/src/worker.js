@@ -145,21 +145,30 @@ export default {
         fetchJson(WHOOP_API + "/v2/activity/sleep?limit=" + lim, h),
         fetchJson(WHOOP_API + "/v2/cycle?limit=" + lim, h)
       ]);
+      // Tageszuordnung: Ein Whoop-Zyklus läuft von Einschlafen zu Einschlafen. Früher wurde das
+      // UTC-Startdatum genommen → wer vor Mitternacht einschläft, bekam Strain/Recovery auf den
+      // VORTAG gebucht. Jetzt: lokale Zeit (timezone_offset) und Zyklus-Start + 12 h = „Whoop-Tag“
+      // (23:00 eingeschlafen → nächster Tag, 01:00 → derselbe Tag). Recovery hängt am Zyklus.
       const day = {};
       const get = (d) => (day[d] || (day[d] = { date: d }));
-      for (const r of (rec.records || [])) {
-        const d = (r.created_at || "").slice(0, 10); if (!d || !r.score) continue;
-        const o = get(d); o.recovery = num(r.score.recovery_score); o.hrv = r.score.hrv_rmssd_milli != null ? Math.round(r.score.hrv_rmssd_milli) : null; o.rhr = num(r.score.resting_heart_rate);
+      const cycDay = {};
+      for (const c of (cyc.records || [])) {
+        const d = localDay(c.start, c.timezone_offset, 12); if (!d) continue;
+        cycDay[c.id] = d;
+        if (!c.score) continue;
+        const o = get(d); o.strain = c.score.strain != null ? Math.round(c.score.strain * 10) / 10 : null;
       }
       for (const s of (slp.records || [])) {
-        const d = (s.end || s.start || "").slice(0, 10); if (!d || !s.score) continue;
+        if (s.nap || !s.score) continue; // Nickerchen nicht als Nachtschlaf zählen
+        const d = localDay(s.end || s.start, s.timezone_offset, 0); if (!d) continue;
         const stg = s.score.stage_summary || {};
         const asleep = (stg.total_light_sleep_time_milli || 0) + (stg.total_slow_wave_sleep_time_milli || 0) + (stg.total_rem_sleep_time_milli || 0);
         const o = get(d); o.sleepPerf = num(s.score.sleep_performance_percentage); o.sleepH = hrs(asleep);
       }
-      for (const c of (cyc.records || [])) {
-        const d = (c.start || "").slice(0, 10); if (!d || !c.score) continue;
-        const o = get(d); o.strain = c.score.strain != null ? Math.round(c.score.strain * 10) / 10 : null;
+      for (const r of (rec.records || [])) {
+        if (!r.score) continue;
+        const d = cycDay[r.cycle_id] || localDay(r.created_at, null, 0); if (!d) continue;
+        const o = get(d); o.recovery = num(r.score.recovery_score); o.hrv = r.score.hrv_rmssd_milli != null ? Math.round(r.score.hrv_rmssd_milli) : null; o.rhr = num(r.score.resting_heart_rate);
       }
       const days = Object.values(day).sort((a, b) => a.date.localeCompare(b.date));
       return json({ connected: true, days }, 200, ch);
@@ -180,8 +189,9 @@ export default {
       const mime = m ? m[1] : "image/jpeg";
       const b64 = m ? m[2] : raw;
       if (!b64 || b64.length < 50) return json({ ok: false, error: "no_image" }, 400, ch);
+      const hint = String(body.hint || "").trim().slice(0, 200);
       try {
-        const out = await groqFood(env.GROQ_API_KEY, mime, b64);
+        const out = await groqFood(env.GROQ_API_KEY, mime, b64, hint, env.GROQ_VISION_MODEL);
         return json({ ok: true, ...out }, 200, ch);
       } catch (e) {
         return json({ ok: false, error: String(e && e.message || e) }, 200, ch);
@@ -214,13 +224,24 @@ export default {
 };
 
 function num(v) { return v != null ? Math.round(v) : null; }
+// ISO-Zeit → lokales Datum (YYYY-MM-DD) per Whoop-timezone_offset ("+01:00"), plus shiftH Stunden.
+// Ohne Offset: Europe/Berlin-Näherung +1 h (Marco sitzt dort), besser als nacktes UTC.
+function localDay(iso, offset, shiftH) {
+  if (!iso) return null;
+  const t = Date.parse(iso); if (isNaN(t)) return null;
+  let offMin = 60;
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(offset || "");
+  if (m) offMin = (m[1] === "-" ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+  return new Date(t + (offMin + (shiftH || 0) * 60) * 60000).toISOString().slice(0, 10);
+}
 function hrs(milli) { return milli != null && milli > 0 ? Math.round(milli / 360000) / 10 : null; } // ms → Stunden (1 Dezimal)
 
 // ---- Groq Vision: Essensfoto → erkannte Speisen + geschätzte Nährwerte ----
-// qwen/qwen3.6-27b ist (Stand 14.08.2026) das einzige Vision-fähige Modell im Groq-Katalog
-// (grep input_modalities:"image" gegen /openai/v1/models) — kein Fallback-Array nötig,
-// falls Groq das Modell ablöst: gegen den Katalog neu prüfen statt blind zu raten.
-const GROQ_VISION_MODEL = "qwen/qwen3.6-27b";
+// 23.11.2026: qwen/qwen3.6-27b ist aus dem Groq-Katalog verschwunden → Foto-Erkennung war tot.
+// Laut console.groq.com/docs/vision jetzt: qwen/qwen3.8-27b (+ meta-models/muse-spark-open, Preview).
+// Deshalb Fallback-Kette: optional env.GROQ_VISION_MODEL (ohne Code-Deploy umstellbar), dann Liste.
+// Ist ein Modell weg (400/404 „model…“), wird automatisch das nächste probiert.
+const GROQ_VISION_MODELS = ["qwen/qwen3.8-27b", "qwen/qwen3.6-27b", "meta-models/muse-spark-open"];
 function clampNum(v, lo, hi) { v = Number(v); if (!isFinite(v)) return lo; return Math.max(lo, Math.min(hi, Math.round(v * 10) / 10)); }
 const FOOD_PROMPT =
   'Du bist Ernährungswissenschaftler. Analysiere das Foto von Essen/Getränk.\n' +
@@ -230,30 +251,48 @@ const FOOD_PROMPT =
   '{"items":[{"name":"deutscher Name","grams":Zahl,"kcal":Zahl,"protein":Zahl,"carbs":Zahl,"fat":Zahl,"confidence":0_bis_1}],"note":"kurzer deutscher Hinweis bei Unsicherheit, sonst leer"}\n' +
   'Ist kein Essen erkennbar: {"items":[],"note":"Kein Essen auf dem Foto erkannt"}.';
 
-async function groqFood(apiKey, mime, b64) {
-  const reqBody = {
-    model: GROQ_VISION_MODEL,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "text", text: FOOD_PROMPT },
-        { type: "image_url", image_url: { url: "data:" + mime + ";base64," + b64 } }
-      ]
-    }],
-    temperature: 0.2,
-    max_tokens: 1024,
-    response_format: { type: "json_object" },
-    // Qwen denkt standardmäßig laut (Chain-of-Thought) und frisst damit das Token-Budget auf,
-    // bevor das eigentliche JSON kommt (finish_reason "length" statt "stop", leer geparst) —
-    // exakt dasselbe Muster wie bei Gemini 2.5+ (dort: thinkingConfig.thinkingBudget=0).
-    reasoning_effort: "none"
-  };
+async function groqCall(apiKey, reqBody) {
   let r;
   try { r = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey }, body: JSON.stringify(reqBody) }); }
   catch (e) { throw new Error("fetch_" + (e && e.message || e)); }
-  if (!r.ok) throw new Error("groq_" + r.status);
-  const data = await r.json();
-  const raw = ((data.choices || [])[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  if (r.ok) return { ok: true, data: await r.json() };
+  let msg = ""; try { msg = JSON.stringify(await r.json()); } catch {}
+  return { ok: false, status: r.status, msg };
+}
+
+async function groqFood(apiKey, mime, b64, hint, envModel) {
+  const prompt = FOOD_PROMPT + (hint ? '\nHinweis vom Nutzer zum Foto (hat Vorrang bei Zweifeln): "' + hint.replace(/"/g, "'") + '"' : "");
+  const models = [...new Set([envModel, ...GROQ_VISION_MODELS].filter(Boolean))];
+  let data = null, used = null, lastErr = "groq_no_model";
+  outer: for (const model of models) {
+    // Qwen denkt standardmäßig laut (Chain-of-Thought) und frisst damit das Token-Budget auf,
+    // bevor das JSON kommt → reasoning_effort "none". Kennt ein Modell den Wert nicht (400),
+    // einmal ohne den Parameter wiederholen statt aufzugeben.
+    for (const reasoning of ["none", null]) {
+      const reqBody = {
+        model,
+        messages: [{ role: "user", content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: "data:" + mime + ";base64," + b64 } }
+        ] }],
+        temperature: 0.2,
+        max_tokens: reasoning ? 1024 : 4096,
+        response_format: { type: "json_object" }
+      };
+      if (reasoning) reqBody.reasoning_effort = reasoning;
+      const res = await groqCall(apiKey, reqBody);
+      if (res.ok) { data = res.data; used = model; break outer; }
+      lastErr = "groq_" + res.status;
+      if (res.status === 401 || res.status === 429) throw new Error(lastErr); // Key/Limit: anderes Modell hilft nicht
+      const modelGone = res.status === 404 || /model/i.test(res.msg) && /not.?found|decommission|does not exist|not supported|access/i.test(res.msg);
+      if (modelGone) continue outer;        // nächstes Modell
+      if (res.status !== 400) throw new Error(lastErr);
+      // sonstiger 400 → Retry ohne reasoning_effort, danach nächstes Modell
+    }
+  }
+  if (!data) throw new Error(lastErr);
+  // Falls das Modell trotzdem „laut denkt“: <think>…</think> entfernen, sonst greift die {…}-Suche ins Denken
+  const raw = (((data.choices || [])[0] && data.choices[0].message && data.choices[0].message.content) || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
   let parsed;
   try { parsed = JSON.parse(raw); }
   catch { const mm = raw.match(/\{[\s\S]*\}/); try { parsed = mm ? JSON.parse(mm[0]) : null; } catch { parsed = null; } }
@@ -267,7 +306,7 @@ async function groqFood(apiKey, mime, b64) {
     fat: clampNum(it.fat, 0, 600),
     confidence: clampNum(it.confidence, 0, 1)
   })).filter(it => it.name);
-  return { items, note: String(parsed.note || "").slice(0, 200), model: GROQ_VISION_MODEL };
+  return { items, note: String(parsed.note || "").slice(0, 200), model: used };
 }
 
 async function saveTokens(env, tok) {

@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v11 · 2026-08-14";
+const APP_VERSION = "v12 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -261,7 +261,10 @@ function copyYesterday() {
 function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
 
 // ---------- supplements ----------
-function suppTakenMap() { return state.suppLog[selDate] || (state.suppLog[selDate] = {}); }
+// Nur LESEN legt nichts an (früher erzeugte schon das Durchblättern leere Tage → die
+// Auswertung zählte sie als „nicht genommen“ und erfand Muster). Angelegt wird erst beim Abhaken.
+function suppTakenMap() { return state.suppLog[selDate] || {}; }
+function suppTakenMapW() { return state.suppLog[selDate] || (state.suppLog[selDate] = {}); }
 function renderSupps() {
   const box = $("#suppList"); if (!box) return;
   box.innerHTML = "";
@@ -281,8 +284,9 @@ function renderSupps() {
       </div>
       <button class="edit" title="bearbeiten">✎</button>`;
     row.querySelector(".chk").onclick = row.querySelector(".info").onclick = () => {
-      const t = suppTakenMap();
+      const t = suppTakenMapW();
       if (t[s.id]) delete t[s.id]; else t[s.id] = true;
+      if (!Object.keys(t).length) delete state.suppLog[selDate];
       persist(); renderSupps();
     };
     row.querySelector(".edit").onclick = (ev) => { ev.stopPropagation(); openSuppSheet(s); };
@@ -339,6 +343,7 @@ function openSheet(meal, entry) {
   $("#fFat").value = entry ? entry.fat : "";
   $("#searchInput").value = ""; $("#results").innerHTML = ""; $("#per100hint").textContent = "";
   const vb = $("#visionBox"); if (vb) vb.innerHTML = "";
+  const vh = $("#visionHint"); if (vh) vh.value = "";
   $("#saveEntry").textContent = entry ? "Speichern" : "Hinzufügen";
   renderFavChips();
   showSheet("food", true);
@@ -547,7 +552,7 @@ async function barcodeLookup(code) {
   try {
     const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,product_name_de,brands,nutriments`;
     const data = await (await fetch(url)).json();
-    if (data.status !== 1) return alert("Barcode nicht in der Datenbank — bitte manuell eintragen.");
+    if (data.status !== 1) { alert("Barcode " + code + " ist nicht in Open Food Facts. Tipp: Produkt über die Suche finden oder per 🍽️ Foto erkennen lassen."); const si = $("#searchInput"); if (si) si.focus(); return; }
     const it = parseOFF(data.product);
     if (it) pickFood(it); else alert("Keine Nährwerte zu diesem Produkt — manuell eintragen.");
   } catch { alert("Lookup fehlgeschlagen (offline?)."); }
@@ -598,7 +603,10 @@ function drawWeightChart() {
   const pts = state.weights.slice(-30);
   if (pts.length < 2) { ctx.fillStyle = "#9aa3b2"; ctx.font = "13px sans-serif"; ctx.fillText("Mind. 2 Einträge für den Verlauf.", 10, 80); return; }
   const ys = pts.map(p => p.kg); let min = Math.min(...ys), max = Math.max(...ys); if (min === max) { min -= 1; max += 1; }
-  const pad = 24, gx = (i) => pad + i * (W - 2 * pad) / (pts.length - 1), gy = (v) => H - pad - (v - min) / (max - min) * (H - 2 * pad);
+  // x nach echtem Datum (Lücken sichtbar), nicht gleichmäßig nach Index
+  const dnum = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  const t0 = dnum(pts[0].date), span = Math.max(1, dnum(pts[pts.length - 1].date) - t0);
+  const pad = 24, gx = (i) => pad + (dnum(pts[i].date) - t0) / span * (W - 2 * pad), gy = (v) => H - pad - (v - min) / (max - min) * (H - 2 * pad);
   ctx.strokeStyle = "#5b9bef"; ctx.lineWidth = 2; ctx.beginPath();
   pts.forEach((p, i) => { i ? ctx.lineTo(gx(i), gy(p.kg)) : ctx.moveTo(gx(i), gy(p.kg)); }); ctx.stroke();
   ctx.fillStyle = "#5b9bef"; pts.forEach((p, i) => { ctx.beginPath(); ctx.arc(gx(i), gy(p.kg), 3, 0, 7); ctx.fill(); });
@@ -802,7 +810,11 @@ function renderWhoop(d) {
 }
 
 // ---------- Journal ----------
-function jToday() { return state.journal[selDate] || (state.journal[selDate] = { flags: {}, mood: 0, note: "" }); }
+const J_EMPTY = () => ({ flags: {}, mood: 0, note: "" });
+function jToday() { return state.journal[selDate] || J_EMPTY(); }          // nur lesen
+function jTodayW() { return state.journal[selDate] || (state.journal[selDate] = J_EMPTY()); } // schreiben
+// Ein Journal-Tag zählt nur, wenn wirklich etwas eingetragen wurde
+function jLogged(j) { return !!j && (Object.values(j.flags || {}).some(Boolean) || j.mood > 0 || !!(j.note || "").trim()); }
 function renderJournal() {
   const box = $("#jflags"); if (!box) return;
   const j = jToday();
@@ -811,7 +823,7 @@ function renderJournal() {
     const b = document.createElement("button");
     b.type = "button"; b.className = "chip" + (j.flags[f.k] ? " on" : "");
     b.textContent = f.t;
-    b.onclick = () => { j.flags[f.k] = !j.flags[f.k]; persist(); renderJournal(); };
+    b.onclick = () => { const w = jTodayW(); w.flags[f.k] = !w.flags[f.k]; persist(); renderJournal(); };
     box.appendChild(b);
   }
   const mood = $("#jmood");
@@ -821,13 +833,13 @@ function renderJournal() {
       const b = document.createElement("button");
       b.type = "button"; b.className = "moodb" + (j.mood === i + 1 ? " on" : "");
       b.textContent = emo;
-      b.onclick = () => { j.mood = i + 1; persist(); renderJournal(); };
+      b.onclick = () => { const w = jTodayW(); w.mood = w.mood === i + 1 ? 0 : i + 1; persist(); renderJournal(); };
       mood.appendChild(b);
     });
   }
   const note = $("#jnote"); if (note && note.value !== j.note) note.value = j.note || "";
 }
-on("#jnote", "input", (e) => { jToday().note = e.target.value; persist(); });
+on("#jnote", "input", (e) => { jTodayW().note = e.target.value; persist(); });
 
 // ---------- Verlauf + Insights ----------
 async function loadHistory(force) {
@@ -880,7 +892,7 @@ function renderInsights() {
   const rows = [];
   for (const date of Object.keys(state.bodyLog)) {
     const b = state.bodyLog[date], j = state.journal[date];
-    if (b && b.recovery != null && j) rows.push({ date, rec: b.recovery, flags: j.flags || {} });
+    if (b && b.recovery != null && jLogged(j)) rows.push({ date, rec: b.recovery, flags: j.flags || {} });
   }
   if (rows.length < 4) {
     box.innerHTML = `<p class="hint">Noch ${Math.max(0, 4 - rows.length)} Journal-Tag(e) bis zur ersten Auswertung. Trag oben einfach täglich kurz ein, was war.</p>`;
@@ -904,7 +916,7 @@ function renderInsights() {
 }
 on("#histRefresh", "click", () => loadHistory(true));
 
-// ---------- Foto-KI: Essen erkennen (Gemini Vision über Worker) ----------
+// ---------- Foto-KI: Essen erkennen (Groq Vision über Worker, optional mit Text-Hinweis) ----------
 on("#photoFoodBtn", "click", () => $("#foodPhotoInput").click());
 on("#foodPhotoInput", "change", async (e) => {
   const file = e.target.files[0]; e.target.value = "";
@@ -918,13 +930,16 @@ on("#foodPhotoInput", "change", async (e) => {
     const r = await fetch(WHOOP_WORKER + "/vision/food", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-App-Token": k },
-      body: JSON.stringify({ image: dataUrl })
+      body: JSON.stringify({ image: dataUrl, hint: (($("#visionHint") || {}).value || "").trim() })
     });
     const d = await r.json();
     if (!d || !d.ok) {
       const err = d && d.error;
       const why = err === "unauthorized" ? "App-Schlüssel stimmt nicht"
-        : /^gemini_/.test(err || "") ? "Foto-KI-Dienst gerade nicht erreichbar (Gemini-Fehler)"
+        : err === "groq_429" ? "Foto-KI gerade ausgelastet — in einer Minute nochmal"
+        : err === "groq_401" ? "Foto-KI-Schlüssel auf dem Server ungültig"
+        : /^groq_|^fetch_/.test(err || "") ? "Foto-KI-Dienst gerade nicht erreichbar (" + err + ")"
+        : err === "unparsable" ? "KI-Antwort unlesbar — nochmal versuchen"
         : err === "no_key" ? "Foto-KI serverseitig nicht eingerichtet"
         : err || "unbekannt";
       box.innerHTML = `<div class="vision-msg err">Erkennung fehlgeschlagen (${esc(why)}). Bitte manuell eintragen.</div>`;
@@ -1051,7 +1066,11 @@ function renderSuppInsights() {
   for (const date of Object.keys(state.bodyLog)) {
     const b = state.bodyLog[date]; if (!b || b.recovery == null) continue;
     const prev = dayOffset(date, -1);
-    rows.push({ rec: b.recovery, taken: state.suppLog[prev] || {} });
+    const taken = state.suppLog[prev];
+    // Nur Vortage zählen, an denen überhaupt etwas abgehakt wurde — ein nicht geloggter Tag
+    // ist kein Beweis für „nicht genommen“.
+    if (!taken || !Object.values(taken).some(Boolean)) continue;
+    rows.push({ rec: b.recovery, taken });
   }
   if (rows.length < 5) return;
   const out = [];
@@ -1090,6 +1109,8 @@ try {
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;
   renderAll();
   maybeOnboard();
+  // Whoop beim Start still im Hintergrund laden → „Heute · Körper“ im Tagebuch ist sofort aktuell
+  if (whoopKey()) loadWhoop().then(renderTodayBody).catch(() => {});
   // Rückkehr vom Whoop-Login → direkt zum Körper-Tab
   if (location.search.indexOf("whoop=ok") >= 0) {
     switchTab("body");

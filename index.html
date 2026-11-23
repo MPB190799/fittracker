@@ -213,7 +213,7 @@
       </div>
       <div class="card">
         <h2>Info</h2>
-        <p class="hint">Nährwerte aus <b>Open Food Facts</b> (offene Datenbank). Daten bleiben lokal in deinem Browser — keine Cloud, kein Account. Eiweiß-Ziel rechnet sich aus deinem zuletzt eingetragenen Gewicht × Faktor.</p>
+        <p class="hint">Nährwerte aus <b>Open Food Facts</b> (offene Datenbank). Deine Einträge bleiben lokal in deinem Browser — kein Account. Nur Online-Suche, Foto-Erkennung (Bild geht an Groq) und Whoop laufen über deinen eigenen Cloudflare-Worker. Eiweiß-Ziel rechnet sich aus deinem zuletzt eingetragenen Gewicht × Faktor.</p>
         <p class="hint" id="verLine"></p>
       </div>
     </section>
@@ -249,6 +249,7 @@
 
     <button class="primary scanbtn" id="photoFoodBtn" style="margin-bottom:10px">🍽️ Essen fotografieren (KI erkennt Nährwerte)</button>
     <input type="file" accept="image/*" capture="environment" id="foodPhotoInput" style="display:none" />
+    <div class="field" style="margin-bottom:10px"><input id="visionHint" autocomplete="off" placeholder="optional vor dem Foto: was ist drauf? z.B. „Reis mit Hähnchen“" /></div>
     <div id="visionBox"></div>
     <div class="row" style="margin-bottom:10px">
       <button class="ghost scanbtn" id="scanBtn" style="margin:0">📷 Barcode</button>

@@ -1,11 +1,10 @@
 # FitTracker
 
 Persönlicher Kalorien-, Makro-, Gewichts- & Progress-Foto-Tracker (MyFitnessPal-Style).
-**100% statisch** — läuft auf GitHub Pages, kein Server, kein Account. Daten bleiben in deinem Browser.
+Statische PWA auf GitHub Pages, kein Account. Deine Einträge bleiben in deinem Browser. Ein kleiner eigener Cloudflare-Worker (`whoop-worker/`) übernimmt Whoop, Online-Suche und Foto-Erkennung.
 
 ## Live
-GitHub Pages aktivieren (Settings → Pages → Branch `main` / Root), dann erreichbar unter:
-`https://<dein-user>.github.io/fittracker/`
+`https://mpb190799.github.io/fittracker/` (GitHub Pages, Branch `master`)
 
 ## Features
 - **Tagebuch:** Mahlzeiten (Frühstück/Mittag/Abend/Snack), Kalorien + Eiweiß/KH/Fett mit Ziel-Balken
@@ -18,8 +17,9 @@ GitHub Pages aktivieren (Settings → Pages → Branch `main` / Root), dann erre
 - **PWA:** „Zum Homescreen hinzufügen" → wie eine echte App, läuft offline
 
 ## Daten & Privatsphäre
-Alles bleibt **lokal im Browser** (localStorage + IndexedDB). Nichts wird hochgeladen, kein Tracking, keine API-Keys.
-Repo darf öffentlich sein — der Code enthält keine persönlichen Daten. ⚠️ Browser-Daten löschen = Tracking weg → regelmäßig Backup exportieren.
+Einträge, Gewicht, Fotos, Journal bleiben **lokal im Browser** (localStorage + IndexedDB). Kein Tracking.
+Ausnahmen, alle über den eigenen Worker: Suchbegriffe → Open Food Facts, **Essensfotos → Groq** (KI-Erkennung, ~0,1 Cent/Foto), Whoop-Daten werden von Whoop abgeholt.
+Repo darf öffentlich sein — der Code enthält keine persönlichen Daten, Secrets liegen nur im Worker. ⚠️ Browser-Daten löschen = Tracking weg → regelmäßig Backup exportieren.
 
 ## Lokal testen
 Reine statische Seite — kein Build:
@@ -29,5 +29,8 @@ python3 -m http.server 8080   # dann http://localhost:8080
 ```
 (Barcode-Scan geht lokal nur über `localhost`, nicht über die LAN-IP — auf der HTTPS-Pages-URL überall.)
 
+## Tests
+`node tests/worker.test.mjs` (Worker-Logik) und `node tests/smoke.mjs` (Browser, braucht Playwright + lokalen Server). Laufen automatisch bei jedem Push (GitHub Action).
+
 ## Tech
-Vanilla JS + HTML + CSS, keine Frameworks, keine Dependencies (html5-qrcode via CDN für den Scan).
+Vanilla JS + HTML + CSS, keine Frameworks, keine Dependencies (html5-qrcode via CDN für den Scan). Worker: Cloudflare Workers + KV. Kontext für Coding-Agenten: `CLAUDE.md`.
