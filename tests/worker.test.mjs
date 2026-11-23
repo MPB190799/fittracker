@@ -49,3 +49,30 @@ const day = (d.days || []).find(x => x.date === "2026-11-22") || {};
 ok(d.days.length === 1 && day.strain === 12.3 && day.recovery === 71 && day.sleepH === 7, "Whoop-Tag korrekt: alles am 22.11. (vorher Strain am 21.11.)");
 
 process.exitCode = fails ? 1 : 0;
+
+// 5) Workers AI (gratis) hat Vorrang — Groq wird gar nicht angefragt
+let groqCalls = 0, aiModels = [];
+globalThis.fetch = async () => { groqCalls++; return new Response(JSON.stringify(groqOK)); };
+env.AI = { run: async (model, inp) => { aiModels.push(model);
+  if (!inp.messages[0].content[1].image_url.url.startsWith("data:image/jpeg;base64,")) throw new Error("bild fehlt");
+  return { response: '{"items":[{"name":"Banane","grams":120,"kcal":110,"protein":1,"carbs":27,"fat":0.4,"confidence":0.9}],"note":""}' }; } };
+d = await call("/vision/food", { method: "POST", body: JSON.stringify({ image: img }) });
+ok(d.ok && d.items[0].name === "Banane" && d.model === "@cf/qwen/qwen3.8-27b" && groqCalls === 0, "Workers AI zuerst, Groq unberührt");
+
+// 6) Erstes CF-Modell wirft → zweites CF-Modell (OpenAI-Format), immer noch ohne Groq
+aiModels = []; groqCalls = 0;
+env.AI = { run: async (model) => { aiModels.push(model);
+  if (model === "@cf/qwen/qwen3.8-27b") throw new Error("5007: model not found");
+  return { choices: [{ message: { content: '```json\n{"items":[{"name":"Ei","grams":60,"kcal":90,"protein":7,"carbs":0.5,"fat":6}]}\n```' } }] }; } };
+d = await call("/vision/food", { method: "POST", body: JSON.stringify({ image: img }) });
+ok(d.ok && d.model.includes("mistral") && groqCalls === 0, "CF-Fallback auf Mistral (Code-Fences werden entfernt)");
+
+// 7) Gratis-Kontingent leer → Groq-Notfall; ohne Groq-Key → klare Meldung cf_limit
+env.AI = { run: async () => { throw new Error("4006: you have used up your daily free allocation of 10,000 neurons"); } };
+d = await call("/vision/food", { method: "POST", body: JSON.stringify({ image: img }) });
+ok(d.ok && groqCalls === 1, "Kontingent leer → Groq als Notfall");
+const gk = env.GROQ_API_KEY; delete env.GROQ_API_KEY;
+d = await call("/vision/food", { method: "POST", body: JSON.stringify({ image: img }) });
+ok(!d.ok && d.error === "cf_limit", "ohne Groq-Key → cf_limit");
+env.GROQ_API_KEY = gk; delete env.AI;
+process.exitCode = fails ? 1 : 0;

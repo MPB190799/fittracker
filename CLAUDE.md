@@ -10,7 +10,8 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   Jede Änderung an der Datenform muss in `normalizeState()` abgesichert werden (alte Backups!).
 - **Cloudflare Worker** `whoop-worker/` (`fittracker-whoop.mbcapitalstrategies.workers.dev`):
   Whoop-OAuth + Token-Refresh (KV `TOKENS`), `/whoop/today`, `/whoop/history`,
-  `/food/search` (OFF-Proxy, wegen CORS), `/vision/food` (Groq Vision, ~0,1 Cent/Foto).
+  `/food/search` (OFF-Proxy, wegen CORS), `/vision/food` (Foto-KI: primär Cloudflare Workers AI im
+  eigenen Account, Binding `AI`, 10.000 Neurons/Tag gratis; Groq nur Notfall-Fallback ~0,1 Cent/Foto).
   Auth der App gegenüber dem Worker: Header `X-App-Token` = Secret `APP_TOKEN`.
   Secrets nur per `wrangler secret put` (`WHOOP_CLIENT_SECRET`, `APP_TOKEN`, `GROQ_API_KEY`), nie ins Repo.
 
@@ -23,8 +24,11 @@ Whoop-Körperdaten an einem Ort. Ein Nutzer (Marco), iPhone-Safari als Hauptger�
   die Auswertungen). Schreib-Helfer: `jTodayW()`, `suppTakenMapW()`.
 - Whoop-Tage: Zyklus = Einschlafen→Einschlafen; Zuordnung über `localDay()` im Worker, nie UTC-Datum.
 - Bei jeder Änderung `APP_VERSION` (app.js) und `CACHE` (sw.js) hochzählen, sonst klebt die alte Version.
-- Groq-Vision-Modelle verschwinden ohne Vorwarnung → Liste `GROQ_VISION_MODELS` gegen
-  https://console.groq.com/docs/vision prüfen; schnell umstellbar per Worker-Variable `GROQ_VISION_MODEL`.
+- Vision-Modelle verschwinden ohne Vorwarnung → Listen `CF_VISION_MODELS` (developers.cloudflare.com/workers-ai/models)
+  und `GROQ_VISION_MODELS` (console.groq.com/docs/vision) prüfen; umstellbar per Worker-Variable
+  `CF_VISION_MODEL` / `GROQ_VISION_MODEL`. Keine multimodalen Llama-Modelle (Meta-Lizenz schließt EU aus).
+- Kalorienziel-Automatik (`adaptiveEstimate`): Verbrauch = Ø kcal (Tage ≥ 800 kcal) − Gewichtstrend × 7700.
+  Nie ohne genug Daten schätzen; Untergrenze 1400 kcal.
 
 ## Prüfen (Definition of Done)
 ```bash

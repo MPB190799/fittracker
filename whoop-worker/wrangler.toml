@@ -14,3 +14,7 @@ APP_RETURN = "https://mpb190799.github.io/fittracker/"
 [[kv_namespaces]]
 binding = "TOKENS"
 id = "7d6e580caf6942bc88a52a77e38d62c7"
+
+# Workers AI (Foto-Erkennung) — läuft im eigenen Cloudflare-Account, 10.000 Neurons/Tag gratis.
+[ai]
+binding = "AI"

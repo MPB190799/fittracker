@@ -174,14 +174,14 @@ export default {
       return json({ connected: true, days }, 200, ch);
     }
 
-    // 6) Foto → Essen erkennen (Groq Vision) — Bild rein, Nährwerte raus
-    // War bis 14.08.2026 Gemini Vision (Free-Tier) — der Google-Cloud-Consumer wurde von
-    // Google gesperrt (CONSUMER_SUSPENDED, projektweit, kein Code-Bug), deshalb Umstieg auf
-    // Groq (Key war für die Flotte schon vorhanden). Nicht mehr 0€, aber ~0,1 Cent/Foto.
+    // 6) Foto → Essen erkennen — Bild rein, Nährwerte raus
+    // Historie: Gemini (bis 08/2026, Google sperrte den Consumer) → Groq (bis 11/2026, Modell
+    // verschwand). Seit 23.11.2026 primär Cloudflare Workers AI im EIGENEN Account (Binding AI):
+    // kein Drittanbieter, kein Key, 10.000 Neurons/Tag gratis. Groq nur noch als Notfall-Fallback.
     if (path === "/vision/food") {
       if (req.method !== "POST") return json({ error: "method" }, 405, ch);
       if (key !== env.APP_TOKEN) return json({ ok: false, error: "unauthorized" }, 401, ch);
-      if (!env.GROQ_API_KEY) return json({ ok: false, error: "no_key" }, 200, ch);
+      if (!env.AI && !env.GROQ_API_KEY) return json({ ok: false, error: "no_key" }, 200, ch);
       let body;
       try { body = await req.json(); } catch { return json({ ok: false, error: "bad_body" }, 400, ch); }
       const raw = String(body.image || "");
@@ -191,7 +191,7 @@ export default {
       if (!b64 || b64.length < 50) return json({ ok: false, error: "no_image" }, 400, ch);
       const hint = String(body.hint || "").trim().slice(0, 200);
       try {
-        const out = await groqFood(env.GROQ_API_KEY, mime, b64, hint, env.GROQ_VISION_MODEL);
+        const out = await visionFood(env, mime, b64, hint);
         return json({ ok: true, ...out }, 200, ch);
       } catch (e) {
         return json({ ok: false, error: String(e && e.message || e) }, 200, ch);
@@ -260,8 +260,63 @@ async function groqCall(apiKey, reqBody) {
   return { ok: false, status: r.status, msg };
 }
 
-async function groqFood(apiKey, mime, b64, hint, envModel) {
-  const prompt = FOOD_PROMPT + (hint ? '\nHinweis vom Nutzer zum Foto (hat Vorrang bei Zweifeln): "' + hint.replace(/"/g, "'") + '"' : "");
+function foodPrompt(hint) {
+  return FOOD_PROMPT + (hint ? '\nHinweis vom Nutzer zum Foto (hat Vorrang bei Zweifeln): "' + hint.replace(/"/g, "'") + '"' : "");
+}
+
+// ---- Cloudflare Workers AI (eigener Account, Gratis-Kontingent) ----
+// Modelle laut developers.cloudflare.com/workers-ai/models (Stand 23.11.2026). Bewusst KEIN
+// llama-3.2-vision: Metas Lizenz für die multimodalen Llama-Modelle schließt EU-Nutzer aus.
+const CF_VISION_MODELS = ["@cf/qwen/qwen3.8-27b", "@cf/mistralai/mistral-small-3.1-24b-instruct"];
+function aiText(res) {
+  if (res == null) return "";
+  if (typeof res === "string") return res;
+  const c = res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content;
+  if (c != null) return typeof c === "string" ? c : JSON.stringify(c);
+  if (res.response != null) return typeof res.response === "string" ? res.response : JSON.stringify(res.response);
+  return "";
+}
+async function cfRaw(env, mime, b64, hint) {
+  const errs = [];
+  const models = [...new Set([env.CF_VISION_MODEL, ...CF_VISION_MODELS].filter(Boolean))];
+  for (const model of models) {
+    for (const extra of [{ reasoning_effort: "low", response_format: { type: "json_object" } }, {}]) {
+      try {
+        const res = await env.AI.run(model, {
+          messages: [{ role: "user", content: [
+            { type: "text", text: foodPrompt(hint) },
+            { type: "image_url", image_url: { url: "data:" + mime + ";base64," + b64 } }
+          ] }],
+          max_tokens: 2048, temperature: 0.2, ...extra
+        });
+        const raw = aiText(res);
+        if (raw && /\{/.test(raw)) return { raw, used: model };
+        errs.push(model + ":leer");
+      } catch (e) {
+        const m = String(e && e.message || e);
+        errs.push(model + ":" + m.slice(0, 80));
+        // Tageskontingent aufgebraucht / Account-Limit → anderes CF-Modell hilft nicht
+        if (/neuron|quota|limit|4006|capacity/i.test(m)) return { raw: null, err: "cf_limit" };
+      }
+    }
+  }
+  return { raw: null, err: "cf_" + errs.join("|").slice(0, 160) };
+}
+
+// Reihenfolge: Workers AI (gratis) → Groq (Notfall, ~0,1 Cent/Foto, nur wenn Key gesetzt)
+async function visionFood(env, mime, b64, hint) {
+  let raw = null, used = null, err = null;
+  if (env.AI) { const r = await cfRaw(env, mime, b64, hint); raw = r.raw; used = r.used; err = r.err; }
+  if (!raw && env.GROQ_API_KEY) {
+    try { const g = await groqRaw(env.GROQ_API_KEY, mime, b64, hint, env.GROQ_VISION_MODEL); raw = g.raw; used = g.used; }
+    catch (e) { if (!err || !env.AI) err = String(e && e.message || e); else err = err + "+" + String(e && e.message || e); }
+  }
+  if (!raw) throw new Error(err || "no_model");
+  return parseFood(raw, used);
+}
+
+async function groqRaw(apiKey, mime, b64, hint, envModel) {
+  const prompt = foodPrompt(hint);
   const models = [...new Set([envModel, ...GROQ_VISION_MODELS].filter(Boolean))];
   let data = null, used = null, lastErr = "groq_no_model";
   outer: for (const model of models) {
@@ -291,8 +346,12 @@ async function groqFood(apiKey, mime, b64, hint, envModel) {
     }
   }
   if (!data) throw new Error(lastErr);
+  return { raw: aiText(data), used };
+}
+
+function parseFood(rawIn, used) {
   // Falls das Modell trotzdem „laut denkt“: <think>…</think> entfernen, sonst greift die {…}-Suche ins Denken
-  const raw = (((data.choices || [])[0] && data.choices[0].message && data.choices[0].message.content) || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const raw = String(rawIn || "").replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```(?:json)?/g, "").trim();
   let parsed;
   try { parsed = JSON.parse(raw); }
   catch { const mm = raw.match(/\{[\s\S]*\}/); try { parsed = mm ? JSON.parse(mm[0]) : null; } catch { parsed = null; } }

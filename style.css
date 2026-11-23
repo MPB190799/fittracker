@@ -239,3 +239,7 @@ h3.bsec { font-size: 12px; color: var(--muted); text-transform: uppercase; lette
 .water-dots { display: flex; flex-wrap: wrap; gap: 5px; font-size: 20px; line-height: 1; }
 .water-dots .wdot { filter: grayscale(1) opacity(.32); transition: filter .2s; }
 .water-dots .wdot.on { filter: none; }
+
+/* Vorlagen */
+button.add.tplsave { margin-top: 6px; border-style: dotted; color: var(--muted); }
+.chip.tpl { border-color: var(--gold); color: var(--gold); }

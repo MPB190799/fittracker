@@ -198,6 +198,25 @@
         <button class="primary" id="saveGoals">Ziele speichern</button>
       </div>
       <div class="card">
+        <h2>Automatisches Kalorienziel</h2>
+        <p class="hint" style="margin-top:0">Rechnet aus deinem Gewichtstrend und dem, was du wirklich gegessen hast, deinen echten Verbrauch — und schlägt ein passendes Ziel vor. Alles lokal.</p>
+        <div class="field"><label>Mein Ziel</label>
+          <select id="goalRate">
+            <option value="-0.75">Abnehmen zügig (−0,75 kg/Woche)</option>
+            <option value="-0.5">Abnehmen (−0,5 kg/Woche)</option>
+            <option value="-0.25">Abnehmen sanft (−0,25 kg/Woche)</option>
+            <option value="0">Gewicht halten</option>
+            <option value="0.25">Aufbauen (+0,25 kg/Woche)</option>
+            <option value="0.5">Aufbauen zügig (+0,5 kg/Woche)</option>
+          </select>
+        </div>
+        <div id="adaptBox"></div>
+      </div>
+      <div class="card">
+        <h2>Mahlzeiten-Vorlagen</h2>
+        <div id="tplList"><!-- injected --></div>
+      </div>
+      <div class="card">
         <h2>Backup</h2>
         <p class="hint">Deine Daten liegen nur in <b>diesem Browser</b>. Vor Browser-Wechsel/Handy-Umzug exportieren — und auf dem neuen Gerät importieren.</p>
         <div class="row">
@@ -249,7 +268,7 @@
 
     <button class="primary scanbtn" id="photoFoodBtn" style="margin-bottom:10px">🍽️ Essen fotografieren (KI erkennt Nährwerte)</button>
     <input type="file" accept="image/*" capture="environment" id="foodPhotoInput" style="display:none" />
-    <div class="field" style="margin-bottom:10px"><input id="visionHint" autocomplete="off" placeholder="optional vor dem Foto: was ist drauf? z.B. „Reis mit Hähnchen“" /></div>
+    <div class="field" style="margin-bottom:10px"><input id="visionHint" autocomplete="off" placeholder="optional: was ist drauf? (hilft der KI)" /></div>
     <div id="visionBox"></div>
     <div class="row" style="margin-bottom:10px">
       <button class="ghost scanbtn" id="scanBtn" style="margin:0">📷 Barcode</button>
@@ -257,6 +276,10 @@
     </div>
     <div id="reader" style="display:none"></div>
 
+    <div id="tplWrap" style="display:none">
+      <label class="chips-lbl">Vorlagen (1 Tipp = alles rein)</label>
+      <div class="chips" id="tplChips"></div>
+    </div>
     <div id="favWrap" style="display:none">
       <label class="chips-lbl">Schnell (zuletzt / oft gegessen)</label>
       <div class="chips" id="favChips"></div>

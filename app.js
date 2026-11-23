@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v12 · 2026-11-23";
+const APP_VERSION = "v13 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -113,8 +113,8 @@ const PORTIONS = [
 ];
 
 const DEFAULT = {
-  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500 },
-  entries: [], weights: [], photos: [], foods: [],
+  profile: { kcalTarget: 2200, proteinPerKg: 2.0, carbTarget: 220, fatTarget: 70, waterTarget: 2500, goalRate: 0 },
+  entries: [], weights: [], photos: [], foods: [], templates: [], // templates: [{id,name,items:[{name,grams,kcal,protein,carbs,fat}]}]
   supplements: SEED_SUPPS.map(s => ({ id: uid(), ...s })),
   suppLog: {}, // { "2026-06-11": { suppId: true } }
   journal: {}, // { "2026-06-11": { flags:{}, mood:3, note:"" } }
@@ -149,6 +149,7 @@ function normalizeState(db) {
     supplements: Array.isArray(db.supplements) ? db.supplements : clone(DEFAULT.supplements),
     suppLog: db.suppLog && typeof db.suppLog === "object" ? db.suppLog : {},
     foods: Array.isArray(db.foods) ? db.foods : [],
+    templates: Array.isArray(db.templates) ? db.templates.filter(t => t && Array.isArray(t.items)) : [],
     journal: db.journal && typeof db.journal === "object" ? db.journal : {},
     bodyLog: db.bodyLog && typeof db.bodyLog === "object" ? db.bodyLog : {},
     water: db.water && typeof db.water === "object" ? db.water : {}
@@ -242,6 +243,12 @@ function renderMeals() {
     add.className = "add"; add.textContent = "+ " + MEALS[key];
     add.onclick = () => openSheet(key);
     div.appendChild(add);
+    if (items.length) {
+      const tb = document.createElement("button");
+      tb.className = "add tplsave"; tb.textContent = "★ Als Vorlage speichern";
+      tb.onclick = () => saveTemplate(key, items);
+      div.appendChild(tb);
+    }
     card.appendChild(div);
   }
   const rep = document.createElement("button");
@@ -258,6 +265,104 @@ function copyYesterday() {
   for (const e of items) state.entries.push({ id: uid(), date: selDate, meal: e.meal, name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
   persist(); renderDiary();
 }
+// ---------- Mahlzeiten-Vorlagen („mein Frühstück" mit 1 Tipp) ----------
+const tplItem = (e) => ({ name: e.name, grams: e.grams, kcal: e.kcal, protein: e.protein, carbs: e.carbs, fat: e.fat });
+function saveTemplate(meal, items) {
+  const name = (prompt("Name der Vorlage:", "Mein " + MEALS[meal]) || "").trim();
+  if (!name) return;
+  const ex = state.templates.find(t => t.name.toLowerCase() === name.toLowerCase());
+  if (ex && !confirm(`Vorlage „${name}" gibt es schon — überschreiben?`)) return;
+  if (ex) ex.items = items.map(tplItem);
+  else state.templates.push({ id: uid(), name, items: items.map(tplItem) });
+  persist(); renderTemplatesList();
+  alert(`Vorlage „${name}" gespeichert (${items.length} Lebensmittel). Beim Hinzufügen oben unter „Vorlagen" antippen.`);
+}
+function tplKcal(t) { return Math.round(t.items.reduce((a, i) => a + (i.kcal || 0), 0)); }
+function applyTemplate(t) {
+  const meal = $("#mealSelect").value || "snack";
+  for (const it of t.items) state.entries.push({ id: uid(), date: selDate, meal, ...tplItem(it) });
+  persist(); showSheet("food", false); renderDiary();
+}
+function renderTplChips() {
+  const wrap = $("#tplWrap"), box = $("#tplChips"); if (!box || !wrap) return;
+  if (!state.templates.length || $("#editId").value) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block"; box.innerHTML = "";
+  for (const t of state.templates) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip tpl";
+    b.textContent = "★ " + t.name + " · " + tplKcal(t) + " kcal";
+    b.onclick = () => applyTemplate(t);
+    box.appendChild(b);
+  }
+}
+function renderTemplatesList() {
+  const box = $("#tplList"); if (!box) return;
+  if (!state.templates.length) { box.innerHTML = `<div class="empty">Noch keine Vorlagen — im Tagebuch unter einer Mahlzeit „★ Als Vorlage speichern" tippen.</div>`; return; }
+  box.innerHTML = "";
+  for (const t of state.templates) {
+    const row = document.createElement("div");
+    row.className = "entry";
+    row.innerHTML = `<div class="info"><div class="nm">★ ${esc(t.name)}</div>
+      <div class="sub">${t.items.length} Lebensmittel · ${tplKcal(t)} kcal · ${esc(t.items.map(i => i.name).join(", ").slice(0, 80))}</div></div>
+      <button class="x" title="löschen">✕</button>`;
+    row.querySelector(".x").onclick = () => {
+      if (confirm(`Vorlage „${t.name}" löschen?`)) { state.templates = state.templates.filter(x => x.id !== t.id); persist(); renderTemplatesList(); }
+    };
+    box.appendChild(row);
+  }
+}
+
+// ---------- Mitwachsendes Kalorienziel (aus Gewichtstrend + gegessenen kcal) ----------
+// Idee wie MacroFactor: echter Verbrauch = Ø gegessen − (Gewichtsänderung × 7700 kcal/kg).
+// Rein lokal gerechnet. Ehrlich: nur mit genug Daten, sonst sagt die App, was fehlt.
+const KCAL_PER_KG = 7700, ADAPT_DAYS = 28;
+function linSlope(pts) { // pts: [{x,y}] → Steigung (y pro x)
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n;
+  let num = 0, den = 0; for (const p of pts) { num += (p.x - mx) * (p.y - my); den += (p.x - mx) ** 2; }
+  return den ? num / den : 0;
+}
+function adaptiveEstimate() {
+  const end = today(), start = dayOffset(end, -(ADAPT_DAYS - 1));
+  const dnum = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d) / 864e5; };
+  // Tage mit realistisch vollständigem Log (≥ 800 kcal) — heute nicht, der läuft noch
+  const byDay = {};
+  for (const e of state.entries) if (e.date >= start && e.date < end) byDay[e.date] = (byDay[e.date] || 0) + e.kcal;
+  const days = Object.values(byDay).filter(k => k >= 800);
+  const ws = state.weights.filter(w => w.date >= start && w.date <= end);
+  const need = [];
+  if (days.length < 10) need.push(`${10 - days.length} weitere vollständig geloggte Tage`);
+  const spanDays = ws.length ? dnum(ws[ws.length - 1].date) - dnum(ws[0].date) : 0;
+  if (ws.length < 3 || spanDays < 10) need.push("mind. 3 Wiegungen über ≥ 10 Tage");
+  if (need.length) return { ok: false, need, loggedDays: days.length, weighIns: ws.length };
+  const intake = days.reduce((a, k) => a + k, 0) / days.length;
+  const slopeKgDay = linSlope(ws.map(w => ({ x: dnum(w.date), y: w.kg })));
+  const tdee = intake - slopeKgDay * KCAL_PER_KG;
+  const rate = Number(state.profile.goalRate) || 0; // kg/Woche
+  let target = tdee + rate * KCAL_PER_KG / 7;
+  target = Math.round(Math.max(1400, target) / 10) * 10; // Sicherheitsboden, auf 10 gerundet
+  return { ok: true, intake: Math.round(intake), tdee: Math.round(tdee), trendWeek: Math.round(slopeKgDay * 7 * 100) / 100, target, loggedDays: days.length, weighIns: ws.length };
+}
+function renderAdaptive() {
+  const box = $("#adaptBox"); if (!box) return;
+  const sel = $("#goalRate"); if (sel) sel.value = String(state.profile.goalRate || 0);
+  const r = adaptiveEstimate();
+  if (!r.ok) {
+    box.innerHTML = `<p class="hint">Noch zu wenig Daten (letzte ${ADAPT_DAYS} Tage: ${r.loggedDays} Tage geloggt, ${r.weighIns} Wiegungen). Es fehlen: <b>${r.need.join(" und ")}</b>.</p>`;
+    return;
+  }
+  const diff = r.target - state.profile.kcalTarget;
+  box.innerHTML = `<div class="body-grid">
+      <div class="bcard"><div class="bval">${r.tdee}</div><div class="blbl">Verbrauch</div><div class="bsub">kcal/Tag (geschätzt)</div></div>
+      <div class="bcard"><div class="bval">${r.trendWeek > 0 ? "+" : ""}${r.trendWeek}</div><div class="blbl">Trend</div><div class="bsub">kg/Woche</div></div>
+      <div class="bcard"><div class="bval">${r.target}</div><div class="blbl">Vorschlag</div><div class="bsub">kcal/Tag</div></div>
+    </div>
+    <p class="hint">Basis: Ø ${r.intake} kcal an ${r.loggedDays} Tagen, ${r.weighIns} Wiegungen. Aktuelles Ziel ${state.profile.kcalTarget} kcal${diff ? ` (${diff > 0 ? "+" : ""}${diff})` : " — passt"}.</p>
+    ${Math.abs(diff) >= 50 ? `<button class="primary" id="adaptApply">Vorschlag ${r.target} kcal übernehmen</button>` : ""}`;
+  const b = $("#adaptApply");
+  if (b) b.onclick = () => { state.profile.kcalTarget = r.target; persist(); fillGoals(); renderDiary(); renderAdaptive(); };
+}
+on("#goalRate", "change", (e) => { state.profile.goalRate = Number(e.target.value) || 0; persist(); renderAdaptive(); });
+
 function renderDiary() { renderSummary(); renderMeals(); renderWater(); renderTodayBody(); }
 
 // ---------- supplements ----------
@@ -346,6 +451,7 @@ function openSheet(meal, entry) {
   const vh = $("#visionHint"); if (vh) vh.value = "";
   $("#saveEntry").textContent = entry ? "Speichern" : "Hinzufügen";
   renderFavChips();
+  renderTplChips();
   showSheet("food", true);
 }
 function showSheet(which, on) {
@@ -711,7 +817,7 @@ function switchTab(tab) {
   if (tab === "photos") renderPhotos();
   if (tab === "supps") renderSupps();
   if (tab === "body") { loadWhoop(); renderJournal(); loadHistory(); renderWeekReport(); }
-  if (tab === "goals") renderFoodsList();
+  if (tab === "goals") { renderFoodsList(); renderTemplatesList(); renderAdaptive(); }
 }
 on("#datePicker", "change", (e) => { selDate = e.target.value || today(); refreshDate(); });
 on("#prevDay", "click", () => shiftDay(-1));
@@ -916,7 +1022,7 @@ function renderInsights() {
 }
 on("#histRefresh", "click", () => loadHistory(true));
 
-// ---------- Foto-KI: Essen erkennen (Groq Vision über Worker, optional mit Text-Hinweis) ----------
+// ---------- Foto-KI: Essen erkennen (Cloudflare Workers AI über Worker, optional mit Text-Hinweis) ----------
 on("#photoFoodBtn", "click", () => $("#foodPhotoInput").click());
 on("#foodPhotoInput", "change", async (e) => {
   const file = e.target.files[0]; e.target.value = "";
@@ -936,9 +1042,10 @@ on("#foodPhotoInput", "change", async (e) => {
     if (!d || !d.ok) {
       const err = d && d.error;
       const why = err === "unauthorized" ? "App-Schlüssel stimmt nicht"
+        : /^cf_limit/.test(err || "") ? "Tageskontingent der Gratis-Foto-KI aufgebraucht — morgen wieder, bis dahin Suche/Barcode"
         : err === "groq_429" ? "Foto-KI gerade ausgelastet — in einer Minute nochmal"
         : err === "groq_401" ? "Foto-KI-Schlüssel auf dem Server ungültig"
-        : /^groq_|^fetch_/.test(err || "") ? "Foto-KI-Dienst gerade nicht erreichbar (" + err + ")"
+        : /^groq_|^fetch_|^cf_/.test(err || "") ? "Foto-KI-Dienst gerade nicht erreichbar (" + err + ")"
         : err === "unparsable" ? "KI-Antwort unlesbar — nochmal versuchen"
         : err === "no_key" ? "Foto-KI serverseitig nicht eingerichtet"
         : err || "unbekannt";
@@ -1103,7 +1210,7 @@ function renderSuppInsights() {
 })();
 
 // ---------- boot ----------
-function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); }
+function renderAll() { renderDiary(); renderSupps(); renderWeight(); renderPhotos(); fillGoals(); renderWater(); renderTodayBody(); renderFoodsList(); renderTemplatesList(); renderAdaptive(); }
 try {
   $("#datePicker").value = selDate;
   const vl = $("#verLine"); if (vl) vl.textContent = "FitTracker " + APP_VERSION;

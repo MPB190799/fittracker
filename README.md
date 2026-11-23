@@ -14,11 +14,14 @@ Statische PWA auf GitHub Pages, kein Account. Deine Einträge bleiben in deinem 
 - **Gewicht:** Eintrag pro Tag + Verlaufs-Chart
 - **Progress-Fotos:** per Kamera aufnehmen, Galerie zum Vergleichen (lokal in IndexedDB)
 - **Backup:** Export/Import als JSON-Datei (Tab „Ziele") — für Geräte-/Browser-Wechsel
+- **Mahlzeiten-Vorlagen:** „Mein Frühstück" einmal speichern, danach mit 1 Tipp eintragen
+- **Automatisches Kalorienziel:** echter Verbrauch aus Gewichtstrend + gegessenen kcal, Vorschlag je nach Ziel (abnehmen/halten/aufbauen)
+- **Foto-KI:** Essen fotografieren (+ optional kurze Beschreibung) → Nährwerte geschätzt
 - **PWA:** „Zum Homescreen hinzufügen" → wie eine echte App, läuft offline
 
 ## Daten & Privatsphäre
 Einträge, Gewicht, Fotos, Journal bleiben **lokal im Browser** (localStorage + IndexedDB). Kein Tracking.
-Ausnahmen, alle über den eigenen Worker: Suchbegriffe → Open Food Facts, **Essensfotos → Groq** (KI-Erkennung, ~0,1 Cent/Foto), Whoop-Daten werden von Whoop abgeholt.
+Ausnahmen, alle über den eigenen Worker: Suchbegriffe → Open Food Facts, **Essensfotos → Cloudflare Workers AI im eigenen Account** (gratis bis 10.000 Neurons/Tag; Groq nur als Notfall), Whoop-Daten werden von Whoop abgeholt.
 Repo darf öffentlich sein — der Code enthält keine persönlichen Daten, Secrets liegen nur im Worker. ⚠️ Browser-Daten löschen = Tracking weg → regelmäßig Backup exportieren.
 
 ## Lokal testen
