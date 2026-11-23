@@ -1,7 +1,7 @@
 // FitTracker — 100% client-side (GitHub Pages). Daten im Browser: localStorage + IndexedDB (Fotos).
 // iOS-Safari-robust: kein structuredClone im Hot-Path, defensiver Boot, sichtbarer Fehler statt stiller Tod.
 "use strict";
-const APP_VERSION = "v22 · 2026-11-23";
+const APP_VERSION = "v23 · 2026-11-23";
 
 const $ = (s) => document.querySelector(s);
 const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
@@ -217,7 +217,7 @@ function proteinBaseKg() {
 function proteinTarget() { const w = proteinBaseKg(); return w ? Math.round(w * (state.profile.proteinPerKg || 2)) : null; }
 // Übergabe an Marcos Lebenskompass (Tagebuch-App): nur über den #-Teil der Adresse, der nie an einen Server geht.
 // Hakt dort Gewohnheiten wie „Kcal-Ziel erreicht“ und genommene Supplements ab.
-const LK_URL = "https://lebenskompass.pages.dev/";
+const LK_URL = new URL("lebenskompass/", location.href).href; // liegt im selben Repo unter /lebenskompass/
 function lebenskompassLink() {
   const es = dayEntries();
   const kcal = es.reduce((a, e) => a + (+e.kcal || 0), 0);
